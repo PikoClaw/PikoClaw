@@ -117,21 +117,23 @@ crates/
 - Cargo workspace with 10 crates
 - Anthropic API client with SSE streaming
 - Core agent loop with multi-turn tool use
-- Tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch
+- Tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch
+- Sub-agent tool (spawn isolated child agents with their own tool access)
 - Permission system (allow/deny/ask per tool and pattern)
+- TUI inline permission dialogs (y/n/always/deny-always per tool call)
 - Session persistence (save, resume, continue)
 - Config file (TOML) and environment variable loading
-- Interactive TUI (ratatui)
+- Interactive TUI (ratatui) with multi-line input (Shift+Enter) and scroll
 - Slash command system with user-defined skills
-- MCP client structure (stdio transport)
+- `/compact` command (summarizes conversation history)
+- MCP client (stdio + SSE transports, full tool bridge into agent registry)
+- Anthropic web search (web_search_20250305 beta tool)
 
 ### Next
 
-- Sub-agent tool (spawn isolated child agents as tools)
-- MCP SSE transport and full tool bridge
-- TUI permission dialogs (inline allow/deny prompts)
-- Multi-line input editor in TUI
-- Web search tool
-- Syntax highlighting in file output
-- Compact command (conversation summarization)
-- Session list and management commands
+- Session list and management commands (`/sessions`, `/delete`)
+- Syntax highlighting for code blocks in TUI output
+- Notebook (Jupyter) tool support
+- Image/screenshot input support
+- Token usage display in status bar
+- Configurable system prompt from CLAUDE.md files

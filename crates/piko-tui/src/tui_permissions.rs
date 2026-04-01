@@ -3,15 +3,23 @@ use piko_config::config::PermissionMode;
 use piko_permissions::checker::{PermissionChecker, PermissionDecision, PermissionRequest};
 use piko_permissions::policy::PermissionPolicy;
 use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
+
+pub struct PermissionAsk {
+    pub request: PermissionRequest,
+    pub reply: oneshot::Sender<PermissionDecision>,
+}
 
 pub struct TuiPermissionChecker {
     policy: Arc<PermissionPolicy>,
+    ask_tx: mpsc::UnboundedSender<PermissionAsk>,
 }
 
 impl TuiPermissionChecker {
-    pub fn new(policy: PermissionPolicy) -> Self {
+    pub fn new(policy: PermissionPolicy, ask_tx: mpsc::UnboundedSender<PermissionAsk>) -> Self {
         Self {
             policy: Arc::new(policy),
+            ask_tx,
         }
     }
 }
@@ -25,7 +33,17 @@ impl PermissionChecker for TuiPermissionChecker {
         match mode {
             PermissionMode::Allow => PermissionDecision::Allow,
             PermissionMode::Deny => PermissionDecision::Deny,
-            PermissionMode::Ask => PermissionDecision::Allow,
+            PermissionMode::Ask => {
+                let (reply_tx, reply_rx) = oneshot::channel();
+                let ask = PermissionAsk {
+                    request: request.clone(),
+                    reply: reply_tx,
+                };
+                if self.ask_tx.send(ask).is_err() {
+                    return PermissionDecision::Deny;
+                }
+                reply_rx.await.unwrap_or(PermissionDecision::Deny)
+            }
         }
     }
 }

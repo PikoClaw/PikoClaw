@@ -1136,6 +1136,7 @@ dependencies = [
  "async-trait",
  "futures-util",
  "piko-config",
+ "piko-tools",
  "piko-types",
  "reqwest",
  "serde",

@@ -1,31 +1,52 @@
-use crate::protocol::{JsonRpcRequest, McpCallToolResult, McpListToolsResult};
+use crate::protocol::{JsonRpcRequest, JsonRpcResponse, McpCallToolResult, McpListToolsResult};
 use crate::server_config::{McpServerConfig, McpTransportConfig};
-use crate::transport::StdioTransport;
+use crate::transport::{SseTransport, StdioTransport};
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
 
+enum Transport {
+    Stdio(Mutex<StdioTransport>),
+    Sse(SseTransport),
+}
+
 pub struct McpClient {
     name: String,
-    transport: Mutex<StdioTransport>,
+    transport: Transport,
     next_id: AtomicU64,
 }
 
 impl McpClient {
     pub async fn connect(config: &McpServerConfig) -> Result<Self> {
         match &config.transport {
-            McpTransportConfig::Stdio { command, args, .. } => {
-                let transport = StdioTransport::spawn(command, args).await?;
+            McpTransportConfig::Stdio { command, args, env } => {
+                let transport = StdioTransport::spawn(command, args, env.as_ref()).await?;
                 let client = Self {
                     name: config.name.clone(),
-                    transport: Mutex::new(transport),
+                    transport: Transport::Stdio(Mutex::new(transport)),
                     next_id: AtomicU64::new(1),
                 };
                 client.initialize().await?;
                 Ok(client)
             }
-            McpTransportConfig::Sse { .. } => Err(anyhow!("SSE transport not yet implemented")),
+            McpTransportConfig::Sse { url } => {
+                let transport = SseTransport::connect(url).await?;
+                let client = Self {
+                    name: config.name.clone(),
+                    transport: Transport::Sse(transport),
+                    next_id: AtomicU64::new(1),
+                };
+                client.initialize().await?;
+                Ok(client)
+            }
+        }
+    }
+
+    async fn send(&self, req: &JsonRpcRequest) -> Result<JsonRpcResponse> {
+        match &self.transport {
+            Transport::Stdio(m) => m.lock().await.send(req).await,
+            Transport::Sse(sse) => sse.send(req).await,
         }
     }
 
@@ -40,16 +61,14 @@ impl McpClient {
                 "clientInfo": { "name": "pikoclaw", "version": "0.1.0" }
             })),
         );
-        let mut transport = self.transport.lock().await;
-        transport.send(&req).await?;
+        self.send(&req).await?;
         Ok(())
     }
 
     pub async fn list_tools(&self) -> Result<McpListToolsResult> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let req = JsonRpcRequest::new(id, "tools/list", None);
-        let mut transport = self.transport.lock().await;
-        let resp = transport.send(&req).await?;
+        let resp = self.send(&req).await?;
 
         if let Some(err) = resp.error {
             return Err(anyhow!("MCP error {}: {}", err.code, err.message));
@@ -67,8 +86,7 @@ impl McpClient {
             "tools/call",
             Some(serde_json::json!({ "name": name, "arguments": input })),
         );
-        let mut transport = self.transport.lock().await;
-        let resp = transport.send(&req).await?;
+        let resp = self.send(&req).await?;
 
         if let Some(err) = resp.error {
             return Err(anyhow!("MCP error {}: {}", err.code, err.message));

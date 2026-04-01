@@ -10,13 +10,22 @@ pub struct StdioTransport {
 }
 
 impl StdioTransport {
-    pub async fn spawn(command: &str, args: &[String]) -> Result<Self> {
-        let mut child = Command::new(command)
-            .args(args)
+    pub async fn spawn(
+        command: &str,
+        args: &[String],
+        env: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<Self> {
+        let mut cmd = Command::new(command);
+        cmd.args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()?;
+            .stderr(std::process::Stdio::null());
+        if let Some(env_vars) = env {
+            for (k, v) in env_vars {
+                cmd.env(k, v);
+            }
+        }
+        let mut child = cmd.spawn()?;
 
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());

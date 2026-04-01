@@ -1,4 +1,5 @@
-use crate::events::AppEvent;
+use crate::events::{AppEvent, PermissionPrompt};
+use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
@@ -8,6 +9,9 @@ use crossterm::terminal::{
 use crossterm::ExecutableCommand;
 use piko_agent::agent::Agent;
 use piko_agent::output::{AgentEvent, OutputSink};
+use piko_config::config::PermissionsConfig;
+use piko_permissions::checker::PermissionDecision;
+use piko_permissions::policy::PermissionPolicy;
 use piko_skills::dispatcher::{DispatchResult, SkillDispatcher};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -19,6 +23,7 @@ use tokio::sync::mpsc;
 pub enum AppState {
     Running,
     WaitingForAgent,
+    AskingPermission,
     Exiting,
 }
 
@@ -32,6 +37,8 @@ pub struct App {
     pub dispatcher: SkillDispatcher,
     pub event_tx: mpsc::UnboundedSender<AppEvent>,
     pub event_rx: mpsc::UnboundedReceiver<AppEvent>,
+    pub pending_permission: Option<PermissionPrompt>,
+    pub permission_ask_rx: mpsc::UnboundedReceiver<PermissionAsk>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,8 +66,14 @@ impl OutputSink for TuiSink {
 }
 
 impl App {
-    pub fn new(agent: Agent, dispatcher: SkillDispatcher) -> Self {
+    pub fn new(mut agent: Agent, dispatcher: SkillDispatcher) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (ask_tx, permission_ask_rx) = mpsc::unbounded_channel::<PermissionAsk>();
+
+        let policy = PermissionPolicy::from_config(&PermissionsConfig::default());
+        let checker = Arc::new(TuiPermissionChecker::new(policy, ask_tx));
+        agent = agent.with_permission_checker(checker);
+
         Self {
             state: AppState::Running,
             messages: Vec::new(),
@@ -71,6 +84,8 @@ impl App {
             dispatcher,
             event_tx,
             event_rx,
+            pending_permission: None,
+            permission_ask_rx,
         }
     }
 
@@ -105,6 +120,15 @@ impl App {
                 }
             }
 
+            while let Ok(ask) = self.permission_ask_rx.try_recv() {
+                let prompt = PermissionPrompt {
+                    request: ask.request,
+                    reply: ask.reply,
+                };
+                self.pending_permission = Some(prompt);
+                self.state = AppState::AskingPermission;
+            }
+
             while let Ok(event) = self.event_rx.try_recv() {
                 match event {
                     AppEvent::Key(key) => self.handle_key(key).await?,
@@ -127,10 +151,34 @@ impl App {
     async fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
         use crossterm::event::{KeyCode, KeyModifiers};
 
+        if self.state == AppState::AskingPermission {
+            if let Some(prompt) = self.pending_permission.take() {
+                let decision = match key.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') => PermissionDecision::Allow,
+                    KeyCode::Char('a') | KeyCode::Char('A') => PermissionDecision::AllowAlways,
+                    KeyCode::Char('d') | KeyCode::Char('D') => PermissionDecision::DenyAlways,
+                    _ => PermissionDecision::Deny,
+                };
+                let tool = prompt.request.tool_name.clone();
+                let decided = format!("{:?}", decision);
+                let _ = prompt.reply.send(decision);
+                self.messages.push(ChatMessage {
+                    role: MessageRole::System,
+                    content: format!("[permission] {} → {}", tool, decided),
+                });
+                self.state = AppState::WaitingForAgent;
+            }
+            return Ok(());
+        }
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('c'), KeyModifiers::CONTROL)
             | (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
                 self.state = AppState::Exiting;
+            }
+            (KeyCode::Enter, KeyModifiers::SHIFT) => {
+                self.input.insert(self.cursor_pos, '\n');
+                self.cursor_pos += 1;
             }
             (KeyCode::Enter, _) if self.state == AppState::Running => {
                 let input = std::mem::take(&mut self.input);
@@ -154,6 +202,12 @@ impl App {
                 if self.cursor_pos < self.input.len() {
                     self.cursor_pos += 1;
                 }
+            }
+            (KeyCode::Up, _) => {
+                self.scroll = self.scroll.saturating_sub(1);
+            }
+            (KeyCode::Down, _) => {
+                self.scroll = self.scroll.saturating_add(1);
             }
             (KeyCode::Char(c), _) => {
                 self.input.insert(self.cursor_pos, c);
@@ -181,6 +235,9 @@ impl App {
                             .to_string(),
                     });
                 }
+                "compact" => {
+                    self.compact_context();
+                }
                 _ => {}
             },
             DispatchResult::Skill {
@@ -200,6 +257,47 @@ impl App {
         Ok(())
     }
 
+    fn compact_context(&mut self) {
+        let summary: String = self
+            .agent
+            .context
+            .messages
+            .iter()
+            .filter_map(|m| {
+                use piko_types::message::{ContentBlock, Role};
+                let prefix = match m.role {
+                    Role::User => "User",
+                    Role::Assistant => "Assistant",
+                };
+                let text: String = m
+                    .content
+                    .iter()
+                    .filter_map(|b| {
+                        if let ContentBlock::Text { text } = b {
+                            Some(text.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if text.is_empty() {
+                    None
+                } else {
+                    Some(format!("{}: {}", prefix, &text[..text.len().min(200)]))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        self.agent.context.messages.clear();
+        self.messages.clear();
+        self.messages.push(ChatMessage {
+            role: MessageRole::System,
+            content: format!("[compact] conversation summarized:\n{}", summary),
+        });
+    }
+
     async fn run_agent_turn(&mut self, input: String) -> Result<()> {
         self.messages.push(ChatMessage {
             role: MessageRole::User,
@@ -210,7 +308,9 @@ impl App {
         let tx = self.event_tx.clone();
         let sink: Arc<dyn OutputSink> = Arc::new(TuiSink { tx });
         self.agent.run_turn(&input, sink).await?;
-        self.state = AppState::Running;
+        if self.state != AppState::AskingPermission {
+            self.state = AppState::Running;
+        }
 
         Ok(())
     }

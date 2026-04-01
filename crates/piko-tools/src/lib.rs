@@ -7,6 +7,7 @@ pub mod grep;
 pub mod registry;
 pub mod tool_trait;
 pub mod web_fetch;
+pub mod web_search;
 
 pub use registry::ToolRegistry;
 pub use tool_trait::{Tool, ToolContext};

@@ -9,12 +9,14 @@ pub struct MessagesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tools: Vec<ToolDefinition>,
+    pub tools: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub betas: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +38,7 @@ impl MessagesRequest {
             tool_choice: None,
             stream: true,
             temperature: None,
+            betas: None,
         }
     }
 
@@ -45,7 +48,20 @@ impl MessagesRequest {
     }
 
     pub fn with_tools(mut self, tools: Vec<ToolDefinition>) -> Self {
-        self.tools = tools;
+        self.tools = tools
+            .into_iter()
+            .filter_map(|t| serde_json::to_value(t).ok())
+            .collect();
+        self
+    }
+
+    pub fn with_raw_tool(mut self, tool: serde_json::Value) -> Self {
+        self.tools.push(tool);
+        self
+    }
+
+    pub fn with_betas(mut self, betas: Vec<String>) -> Self {
+        self.betas = Some(betas);
         self
     }
 

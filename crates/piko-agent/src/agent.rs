@@ -50,8 +50,21 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: AgentConfig, api_key: impl Into<String>) -> Result<Self> {
-        let client = AnthropicClient::new(api_key)?;
-        let tools = ToolRegistry::with_defaults();
+        let client = Arc::new(AnthropicClient::new(api_key)?);
+        let mut tools = ToolRegistry::with_defaults();
+
+        let agent_config = Arc::new(AgentConfig {
+            model: config.model.clone(),
+            max_tokens: config.max_tokens,
+            max_turns: config.max_turns,
+            cwd: config.cwd.clone(),
+            system_prompt: config.system_prompt.clone(),
+            bypass_permissions: config.bypass_permissions,
+        });
+        tools.register(Arc::new(crate::agent_tool::AgentTool::new(
+            Arc::clone(&client),
+            agent_config,
+        )));
 
         let policy =
             PermissionPolicy::from_config(&piko_config::config::PermissionsConfig::default());
@@ -68,7 +81,7 @@ impl Agent {
 
         Ok(Self {
             config,
-            client: Arc::new(client),
+            client,
             tools: Arc::new(tools),
             permissions,
             session_store: None,

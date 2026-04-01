@@ -23,7 +23,15 @@ impl ToolRegistry {
     }
 
     pub fn definitions(&self) -> Vec<ToolDefinition> {
-        self.tools.values().map(|t| t.definition()).collect()
+        self.tools
+            .values()
+            .filter(|t| !t.is_web_search())
+            .map(|t| t.definition())
+            .collect()
+    }
+
+    pub fn has_web_search(&self) -> bool {
+        self.tools.values().any(|t| t.is_web_search())
     }
 
     pub fn names(&self) -> Vec<&str> {
@@ -44,6 +52,7 @@ impl ToolRegistry {
         registry.register(Arc::new(GlobTool));
         registry.register(Arc::new(GrepTool));
         registry.register(Arc::new(crate::web_fetch::WebFetchTool::new()));
+        registry.register(Arc::new(crate::web_search::WebSearchTool));
         registry
     }
 }

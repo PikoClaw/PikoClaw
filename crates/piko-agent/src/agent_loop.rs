@@ -46,6 +46,15 @@ pub async fn run_turn(
             .with_max_tokens(config.max_tokens)
             .with_tools(tools.definitions());
 
+        if tools.has_web_search() {
+            request = request
+                .with_raw_tool(serde_json::json!({
+                    "type": "web_search_20250305",
+                    "name": "web_search"
+                }))
+                .with_betas(vec!["web-search-2025-03-05".to_string()]);
+        }
+
         if let Some(ref system) = context.system_prompt {
             request = request.with_system(system.clone());
         }

@@ -53,12 +53,11 @@ impl AnthropicClient {
 
             debug!("sending messages request to {}", url);
 
-            let resp = http
-                .post(&url)
-                .header("x-api-key", &api_key)
-                .json(&req)
-                .send()
-                .await?;
+            let mut builder = http.post(&url).header("x-api-key", &api_key);
+            if let Some(ref betas) = req.betas {
+                builder = builder.header("anthropic-beta", betas.join(","));
+            }
+            let resp = builder.json(&req).send().await?;
 
             let status = resp.status();
 

@@ -30,6 +30,10 @@ pub trait Tool: Send + Sync {
         false
     }
 
+    fn is_web_search(&self) -> bool {
+        false
+    }
+
     fn description_for_permission(&self, input: &serde_json::Value) -> String {
         format!("run {} with input: {}", self.name(), input)
     }

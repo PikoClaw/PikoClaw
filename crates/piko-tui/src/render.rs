@@ -55,34 +55,51 @@ pub fn render(frame: &mut Frame, app: &App) {
         .collect();
 
     let messages_block = Block::default().borders(Borders::ALL).title(" PikoClaw ");
-
     let list = List::new(items).block(messages_block);
     frame.render_widget(list, chunks[0]);
 
     let status_text = match app.state {
         AppState::WaitingForAgent => " thinking... ",
         AppState::Running => " ready ",
+        AppState::AskingPermission => " permission required ",
         AppState::Exiting => " exiting... ",
     };
-
-    let status = Paragraph::new(status_text).style(Style::default().fg(Color::DarkGray));
+    let status_style = if app.state == AppState::AskingPermission {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    let status = Paragraph::new(status_text).style(status_style);
     frame.render_widget(status, chunks[1]);
 
-    let cursor_display = format!(
-        "{}{}",
-        &app.input[..app.cursor_pos],
-        if app.state == AppState::Running {
-            "█"
+    let input_content = if app.state == AppState::AskingPermission {
+        if let Some(ref prompt) = app.pending_permission {
+            let desc = &prompt.request.description;
+            format!(
+                "Allow [{}]? (y)es / (n)o / (a)lways / (d)eny-always\n{}",
+                prompt.request.tool_name,
+                &desc[..desc.len().min(120)]
+            )
         } else {
-            ""
+            "Allow? (y/n/a/d)".to_string()
         }
-    );
-    let input_widget = Paragraph::new(format!(
-        "> {}{}",
-        cursor_display,
-        &app.input[app.cursor_pos..]
-    ))
-    .block(Block::default().borders(Borders::ALL))
-    .wrap(Wrap { trim: false });
+    } else {
+        let cursor_display = format!(
+            "{}{}",
+            &app.input[..app.cursor_pos],
+            if app.state == AppState::Running {
+                "█"
+            } else {
+                ""
+            }
+        );
+        format!("> {}{}", cursor_display, &app.input[app.cursor_pos..])
+    };
+
+    let input_widget = Paragraph::new(input_content)
+        .block(Block::default().borders(Borders::ALL))
+        .wrap(Wrap { trim: false });
     frame.render_widget(input_widget, chunks[2]);
 }
