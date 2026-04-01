@@ -39,10 +39,13 @@ impl ToolRegistry {
     }
 
     pub fn with_defaults() -> Self {
+        use crate::todo_write::{TodoStore, TodoWriteTool};
         use crate::{
             bash::BashTool, file_edit::FileEditTool, file_read::FileReadTool,
             file_write::FileWriteTool, glob::GlobTool, grep::GrepTool,
+            notebook_edit::NotebookEditTool,
         };
+        use std::collections::HashMap;
 
         let mut registry = Self::new();
         registry.register(Arc::new(BashTool));
@@ -53,6 +56,9 @@ impl ToolRegistry {
         registry.register(Arc::new(GrepTool));
         registry.register(Arc::new(crate::web_fetch::WebFetchTool::new()));
         registry.register(Arc::new(crate::web_search::WebSearchTool));
+        registry.register(Arc::new(NotebookEditTool));
+        let todo_store: TodoStore = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        registry.register(Arc::new(TodoWriteTool::new(todo_store)));
         registry
     }
 }

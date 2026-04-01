@@ -67,6 +67,8 @@ pub async fn run_turn(
         let mut _stop_reason = None;
         let mut input_tokens = 0u32;
         let mut output_tokens = 0u32;
+        let mut cache_creation_tokens = 0u32;
+        let mut cache_read_tokens = 0u32;
         let mut current_text = String::new();
 
         while let Some(event_result) = stream.next().await {
@@ -85,6 +87,8 @@ pub async fn run_turn(
             match event {
                 StreamEvent::MessageStart { message } => {
                     input_tokens = message.usage.input_tokens;
+                    cache_creation_tokens = message.usage.cache_creation_input_tokens;
+                    cache_read_tokens = message.usage.cache_read_input_tokens;
                 }
                 StreamEvent::ContentBlockStart {
                     index,
@@ -163,6 +167,8 @@ pub async fn run_turn(
         sink.emit(AgentEvent::TurnComplete {
             input_tokens,
             output_tokens,
+            cache_creation_tokens,
+            cache_read_tokens,
         })
         .await;
 

@@ -58,19 +58,26 @@ pub fn render(frame: &mut Frame, app: &App) {
     let list = List::new(items).block(messages_block);
     frame.render_widget(list, chunks[0]);
 
-    let status_text = match app.state {
-        AppState::WaitingForAgent => " thinking... ",
-        AppState::Running => " ready ",
-        AppState::AskingPermission => " permission required ",
-        AppState::Exiting => " exiting... ",
-    };
-    let status_style = if app.state == AppState::AskingPermission {
-        Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD)
+    let token_info = if app.total_input_tokens > 0 || app.total_output_tokens > 0 {
+        format!(" ↑{}  ↓{}", app.total_input_tokens, app.total_output_tokens)
     } else {
-        Style::default().fg(Color::DarkGray)
+        String::new()
     };
+    let status_text = match app.state {
+        AppState::WaitingForAgent => format!(" thinking...{}", token_info),
+        AppState::Running => format!(" ready{}", token_info),
+        AppState::AskingPermission => format!(" permission required{}", token_info),
+        AppState::AskingQuestion => format!(" question{}", token_info),
+        AppState::Exiting => format!(" exiting...{}", token_info),
+    };
+    let status_style =
+        if app.state == AppState::AskingPermission || app.state == AppState::AskingQuestion {
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
     let status = Paragraph::new(status_text).style(status_style);
     frame.render_widget(status, chunks[1]);
 
@@ -84,6 +91,19 @@ pub fn render(frame: &mut Frame, app: &App) {
             )
         } else {
             "Allow? (y/n/a/d)".to_string()
+        }
+    } else if app.state == AppState::AskingQuestion {
+        if let Some(ref prompt) = app.pending_question {
+            let opts: String = prompt
+                .options
+                .iter()
+                .enumerate()
+                .map(|(i, o)| format!("  [{}] {}", i + 1, o))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("{}\n{}\nPress number to select:", prompt.question, opts)
+        } else {
+            "Question pending...".to_string()
         }
     } else {
         let cursor_display = format!(

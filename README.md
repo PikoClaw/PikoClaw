@@ -12,24 +12,18 @@ brew install pikoclaw
 ## Usage
 
 ```bash
-# Start interactive session
 pikoclaw
 
-# One-shot prompt (headless)
 pikoclaw --print "explain this codebase"
 
-# Continue last session
 pikoclaw continue
 
-# Resume a specific session
 pikoclaw resume <session-id>
 
-# Use a specific model
 pikoclaw --model sonnet
 pikoclaw --model opus
 pikoclaw --model haiku
 
-# Bypass permission prompts
 pikoclaw --dangerously-skip-permissions
 ```
 
@@ -43,7 +37,7 @@ model = "claude-sonnet-4-5"
 max_tokens = 8192
 
 [permissions]
-bash = "ask"        # allow | deny | ask
+bash = "ask"
 file_write = "ask"
 file_read = "allow"
 web_fetch = "ask"
@@ -53,8 +47,6 @@ tool = "bash"
 pattern = "rm -rf *"
 decision = "deny"
 ```
-
-Set your API key via environment variable:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -66,11 +58,16 @@ export ANTHROPIC_API_KEY=sk-ant-...
 |---|---|
 | `Bash` | Run shell commands |
 | `Read` | Read files with line numbers |
-| `Write` | Write files (creates directories as needed) |
+| `Write` | Write files |
 | `Edit` | Exact string replacement in files |
-| `Glob` | Find files by pattern (respects .gitignore) |
+| `Glob` | Find files by pattern |
 | `Grep` | Search file contents with regex |
 | `WebFetch` | Fetch and extract text from URLs |
+| `WebSearch` | Web search via Anthropic beta |
+| `NotebookEdit` | Edit Jupyter notebook cells |
+| `TodoWrite` | In-session task checklist |
+| `AskUserQuestion` | Ask the user multiple-choice questions |
+| `Agent` | Spawn isolated sub-agents |
 
 ## Slash Commands
 
@@ -118,22 +115,34 @@ crates/
 - Anthropic API client with SSE streaming
 - Core agent loop with multi-turn tool use
 - Tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch
-- Sub-agent tool (spawn isolated child agents with their own tool access)
+- Sub-agent tool (isolated child agents with own tool access and context)
+- NotebookEdit tool (Jupyter `.ipynb` cell replace/insert/delete)
+- TodoWrite tool (in-session task checklist with pending/in-progress/completed states)
+- AskUserQuestion tool (multi-choice prompts answered inline in TUI)
 - Permission system (allow/deny/ask per tool and pattern)
 - TUI inline permission dialogs (y/n/always/deny-always per tool call)
+- TUI inline question dialogs (numbered option selection)
 - Session persistence (save, resume, continue)
 - Config file (TOML) and environment variable loading
 - Interactive TUI (ratatui) with multi-line input (Shift+Enter) and scroll
 - Slash command system with user-defined skills
-- `/compact` command (summarizes conversation history)
+- `/compact` command (summarizes and clears conversation history)
+- `/model <name>` command (switch model mid-session)
 - MCP client (stdio + SSE transports, full tool bridge into agent registry)
-- Anthropic web search (web_search_20250305 beta tool)
+- Anthropic web search (`web_search_20250305` beta tool)
+- CLAUDE.md loading (`~/.claude/CLAUDE.md`, project `CLAUDE.md`, `.claude/rules/*.md`)
+- Prompt caching (`cache_control: ephemeral` on system prompt, last tool, last message)
+- Token usage tracking and display in TUI status bar (cumulative input/output/cache tokens)
 
-### Next
+### Todo
 
 - Session list and management commands (`/sessions`, `/delete`)
 - Syntax highlighting for code blocks in TUI output
-- Notebook (Jupyter) tool support
-- Image/screenshot input support
-- Token usage display in status bar
-- Configurable system prompt from CLAUDE.md files
+- Image and screenshot input support
+- Hooks system (user-defined shell commands triggered on tool events)
+- Extended thinking support
+- Rate limit display in status bar
+- `/resume` command from within the TUI (currently only via CLI)
+- MCP resource reading (`ListResources`, `ReadResource`)
+- Configurable output styles
+- Vim keybinding mode

@@ -8,6 +8,12 @@ pub struct PermissionPrompt {
     pub reply: oneshot::Sender<PermissionDecision>,
 }
 
+pub struct QuestionPrompt {
+    pub question: String,
+    pub options: Vec<String>,
+    pub reply: oneshot::Sender<String>,
+}
+
 #[derive(Debug)]
 pub enum AppEvent {
     Key(KeyEvent),

@@ -12,6 +12,8 @@ pub enum AgentEvent {
     TurnComplete {
         input_tokens: u32,
         output_tokens: u32,
+        cache_creation_tokens: u32,
+        cache_read_tokens: u32,
     },
     Error(String),
 }
@@ -43,8 +45,13 @@ impl OutputSink for StdoutSink {
             AgentEvent::TurnComplete {
                 input_tokens,
                 output_tokens,
+                cache_creation_tokens,
+                cache_read_tokens,
             } => {
-                eprintln!("\n[tokens: in={} out={}]", input_tokens, output_tokens);
+                eprintln!(
+                    "\n[tokens: in={} out={} cache_write={} cache_read={}]",
+                    input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+                );
             }
             AgentEvent::Error(msg) => {
                 eprintln!("\nerror: {}", msg);

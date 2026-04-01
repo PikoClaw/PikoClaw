@@ -1,4 +1,4 @@
-use crate::events::{AppEvent, PermissionPrompt};
+use crate::events::{AppEvent, PermissionPrompt, QuestionPrompt};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -13,6 +13,7 @@ use piko_config::config::PermissionsConfig;
 use piko_permissions::checker::PermissionDecision;
 use piko_permissions::policy::PermissionPolicy;
 use piko_skills::dispatcher::{DispatchResult, SkillDispatcher};
+use piko_tools::ask_user::{AskQuestion, AskUserQuestionTool};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
@@ -24,6 +25,7 @@ pub enum AppState {
     Running,
     WaitingForAgent,
     AskingPermission,
+    AskingQuestion,
     Exiting,
 }
 
@@ -39,6 +41,12 @@ pub struct App {
     pub event_rx: mpsc::UnboundedReceiver<AppEvent>,
     pub pending_permission: Option<PermissionPrompt>,
     pub permission_ask_rx: mpsc::UnboundedReceiver<PermissionAsk>,
+    pub pending_question: Option<QuestionPrompt>,
+    pub question_rx: mpsc::UnboundedReceiver<AskQuestion>,
+    pub total_input_tokens: u32,
+    pub total_output_tokens: u32,
+    pub total_cache_creation_tokens: u32,
+    pub total_cache_read_tokens: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -69,10 +77,16 @@ impl App {
     pub fn new(mut agent: Agent, dispatcher: SkillDispatcher) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (ask_tx, permission_ask_rx) = mpsc::unbounded_channel::<PermissionAsk>();
+        let (question_tx, question_rx) = mpsc::unbounded_channel::<AskQuestion>();
 
         let policy = PermissionPolicy::from_config(&PermissionsConfig::default());
         let checker = Arc::new(TuiPermissionChecker::new(policy, ask_tx));
         agent = agent.with_permission_checker(checker);
+
+        let ask_tool = Arc::new(AskUserQuestionTool::new(question_tx));
+        Arc::get_mut(&mut agent.tools)
+            .expect("tools arc not unique")
+            .register(ask_tool);
 
         Self {
             state: AppState::Running,
@@ -86,6 +100,12 @@ impl App {
             event_rx,
             pending_permission: None,
             permission_ask_rx,
+            pending_question: None,
+            question_rx,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_cache_creation_tokens: 0,
+            total_cache_read_tokens: 0,
         }
     }
 
@@ -129,6 +149,16 @@ impl App {
                 self.state = AppState::AskingPermission;
             }
 
+            while let Ok(ask) = self.question_rx.try_recv() {
+                let prompt = QuestionPrompt {
+                    question: ask.question,
+                    options: ask.options,
+                    reply: ask.reply,
+                };
+                self.pending_question = Some(prompt);
+                self.state = AppState::AskingQuestion;
+            }
+
             while let Ok(event) = self.event_rx.try_recv() {
                 match event {
                     AppEvent::Key(key) => self.handle_key(key).await?,
@@ -150,6 +180,25 @@ impl App {
 
     async fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
         use crossterm::event::{KeyCode, KeyModifiers};
+
+        if self.state == AppState::AskingQuestion {
+            if let Some(prompt) = self.pending_question.take() {
+                let answer = match key.code {
+                    KeyCode::Char(c) if c.is_ascii_digit() => {
+                        let idx = c as usize - '1' as usize;
+                        prompt.options.get(idx).cloned().unwrap_or_default()
+                    }
+                    _ => prompt.options.first().cloned().unwrap_or_default(),
+                };
+                self.messages.push(ChatMessage {
+                    role: MessageRole::System,
+                    content: format!("Q: {} → {}", prompt.question, answer),
+                });
+                let _ = prompt.reply.send(answer);
+                self.state = AppState::WaitingForAgent;
+            }
+            return Ok(());
+        }
 
         if self.state == AppState::AskingPermission {
             if let Some(prompt) = self.pending_permission.take() {
@@ -220,7 +269,7 @@ impl App {
 
     async fn submit_input(&mut self, input: String) -> Result<()> {
         match self.dispatcher.dispatch(&input) {
-            DispatchResult::BuiltIn { name, .. } => match name.as_str() {
+            DispatchResult::BuiltIn { name, args } => match name.as_str() {
                 "exit" | "quit" => {
                     self.state = AppState::Exiting;
                 }
@@ -237,6 +286,22 @@ impl App {
                 }
                 "compact" => {
                     self.compact_context();
+                }
+                "model" => {
+                    if let Some(model_name) = args.first() {
+                        use piko_types::model::ModelId;
+                        let model = ModelId::from_alias(model_name);
+                        self.agent.config.model = model.clone();
+                        self.messages.push(ChatMessage {
+                            role: MessageRole::System,
+                            content: format!("Model set to {}", model.as_str()),
+                        });
+                    } else {
+                        self.messages.push(ChatMessage {
+                            role: MessageRole::System,
+                            content: format!("Current model: {}", self.agent.config.model.as_str()),
+                        });
+                    }
                 }
                 _ => {}
             },
@@ -308,7 +373,7 @@ impl App {
         let tx = self.event_tx.clone();
         let sink: Arc<dyn OutputSink> = Arc::new(TuiSink { tx });
         self.agent.run_turn(&input, sink).await?;
-        if self.state != AppState::AskingPermission {
+        if self.state != AppState::AskingPermission && self.state != AppState::AskingQuestion {
             self.state = AppState::Running;
         }
 
@@ -343,7 +408,17 @@ impl App {
                     });
                 }
             }
-            AgentEvent::TurnComplete { .. } => {}
+            AgentEvent::TurnComplete {
+                input_tokens,
+                output_tokens,
+                cache_creation_tokens,
+                cache_read_tokens,
+            } => {
+                self.total_input_tokens += input_tokens;
+                self.total_output_tokens += output_tokens;
+                self.total_cache_creation_tokens += cache_creation_tokens;
+                self.total_cache_read_tokens += cache_read_tokens;
+            }
             AgentEvent::Error(msg) => {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,

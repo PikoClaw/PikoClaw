@@ -1228,6 +1228,7 @@ dependencies = [
  "piko-permissions",
  "piko-session",
  "piko-skills",
+ "piko-tools",
  "piko-types",
  "ratatui",
  "serde",

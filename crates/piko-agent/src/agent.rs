@@ -75,9 +75,14 @@ impl Agent {
         };
 
         let mut context = ConversationContext::new();
-        if let Some(ref prompt) = config.system_prompt {
-            context.system_prompt = Some(prompt.clone());
-        }
+        let claude_md = piko_config::load_claude_md(&config.cwd);
+        let system = match (&config.system_prompt, claude_md) {
+            (Some(custom), Some(md)) => Some(format!("{}\n\n{}", custom, md)),
+            (Some(custom), None) => Some(custom.clone()),
+            (None, Some(md)) => Some(md),
+            (None, None) => None,
+        };
+        context.system_prompt = system;
 
         Ok(Self {
             config,

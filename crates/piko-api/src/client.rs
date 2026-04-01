@@ -48,16 +48,22 @@ impl AnthropicClient {
         let url = format!("{}/v1/messages", self.base_url);
 
         let stream = async_stream::try_stream! {
-            let mut req = MessagesRequest { stream: true, ..request };
-            req.stream = true;
+            let req = MessagesRequest { stream: true, ..request };
 
             debug!("sending messages request to {}", url);
+
+            let messages_with_cache = req.messages_with_cache();
+            let mut payload = serde_json::to_value(&req)
+                .map_err(|e| ApiError::Sse(format!("request serialization: {}", e)))?;
+            if let Some(obj) = payload.as_object_mut() {
+                obj.insert("messages".to_string(), serde_json::Value::Array(messages_with_cache));
+            }
 
             let mut builder = http.post(&url).header("x-api-key", &api_key);
             if let Some(ref betas) = req.betas {
                 builder = builder.header("anthropic-beta", betas.join(","));
             }
-            let resp = builder.json(&req).send().await?;
+            let resp = builder.json(&payload).send().await?;
 
             let status = resp.status();
 

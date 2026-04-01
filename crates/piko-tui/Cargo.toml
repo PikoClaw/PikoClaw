@@ -19,4 +19,5 @@ piko-agent.workspace = true
 piko-session.workspace = true
 piko-skills.workspace = true
 piko-permissions.workspace = true
+piko-tools.workspace = true
 async-trait.workspace = true
