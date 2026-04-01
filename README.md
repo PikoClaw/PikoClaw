@@ -107,6 +107,20 @@ crates/
   piko-skills       # Slash command registry and dispatcher
 ```
 
+## Creating New Release
+
+```
+cd PikoClaw
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release.yml workflow will:
+
+1. Build binaries for macOS arm64, macOS x86_64, and Linux x86_64
+2. Create the GitHub release and upload the binaries
+3. Automatically update the SHA256 hashes in homebrew-pikoclaw/Formula/pikoclaw.rb and push it
+
 ## Status
 
 ### Done
