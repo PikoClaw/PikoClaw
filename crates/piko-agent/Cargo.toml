@@ -1,0 +1,21 @@
+[package]
+name = "piko-agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+futures-util.workspace = true
+tokio-util.workspace = true
+piko-types.workspace = true
+piko-config.workspace = true
+piko-api.workspace = true
+piko-tools.workspace = true
+piko-permissions.workspace = true
+piko-session.workspace = true

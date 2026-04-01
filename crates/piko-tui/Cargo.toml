@@ -1,0 +1,22 @@
+[package]
+name = "piko-tui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+futures-util.workspace = true
+piko-types.workspace = true
+piko-config.workspace = true
+piko-agent.workspace = true
+piko-session.workspace = true
+piko-skills.workspace = true
+piko-permissions.workspace = true
+async-trait.workspace = true

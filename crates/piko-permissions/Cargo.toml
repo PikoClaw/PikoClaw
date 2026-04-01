@@ -1,0 +1,16 @@
+[package]
+name = "piko-permissions"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+globset.workspace = true
+piko-types.workspace = true
+piko-config.workspace = true

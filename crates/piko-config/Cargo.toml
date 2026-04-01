@@ -1,0 +1,13 @@
+[package]
+name = "piko-config"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+directories.workspace = true
+piko-types.workspace = true

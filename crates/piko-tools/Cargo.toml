@@ -1,0 +1,20 @@
+[package]
+name = "piko-tools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+regex.workspace = true
+globset.workspace = true
+ignore.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+piko-types.workspace = true
+piko-permissions.workspace = true

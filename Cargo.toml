@@ -1,0 +1,83 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/piko-types",
+    "crates/piko-config",
+    "crates/piko-api",
+    "crates/piko-tools",
+    "crates/piko-permissions",
+    "crates/piko-session",
+    "crates/piko-agent",
+    "crates/piko-mcp",
+    "crates/piko-tui",
+    "crates/piko-skills",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ratatui = "0.29"
+crossterm = "0.28"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+directories = "6"
+async-trait = "0.1"
+regex = "1"
+globset = "0.4"
+ignore = "0.4"
+async-stream = "0.3"
+piko-types = { path = "crates/piko-types" }
+piko-config = { path = "crates/piko-config" }
+piko-api = { path = "crates/piko-api" }
+piko-tools = { path = "crates/piko-tools" }
+piko-permissions = { path = "crates/piko-permissions" }
+piko-session = { path = "crates/piko-session" }
+piko-agent = { path = "crates/piko-agent" }
+piko-mcp = { path = "crates/piko-mcp" }
+piko-tui = { path = "crates/piko-tui" }
+piko-skills = { path = "crates/piko-skills" }
+
+[[bin]]
+name = "pikoclaw"
+path = "src/main.rs"
+
+[package]
+name = "pikoclaw"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+piko-types.workspace = true
+piko-config.workspace = true
+piko-api.workspace = true
+piko-agent.workspace = true
+piko-tui.workspace = true
+piko-skills.workspace = true
+piko-session.workspace = true
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+opt-level = 3
