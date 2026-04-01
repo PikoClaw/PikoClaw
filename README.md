@@ -2,6 +2,13 @@
 
 High-performance AI agent for developers, written in Rust.
 
+## Install
+
+```bash
+brew tap PikoClaw/pikoclaw
+brew install pikoclaw
+```
+
 ## Usage
 
 ```bash

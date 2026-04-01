@@ -41,10 +41,15 @@ jobs:
       - name: Rename artifact
         run: cp target/${{ matrix.target }}/release/pikoclaw ${{ matrix.artifact }}
 
+      - name: Compute SHA256
+        run: shasum -a 256 ${{ matrix.artifact }} | awk '{print $1}' > ${{ matrix.artifact }}.sha256
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.sha256
 
   release:
     name: Create Release
@@ -54,9 +59,53 @@ jobs:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             pikoclaw-linux-x86_64/pikoclaw-linux-x86_64
             pikoclaw-macos-x86_64/pikoclaw-macos-x86_64
             pikoclaw-macos-aarch64/pikoclaw-macos-aarch64
+
+  update-tap:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Read SHA256 hashes
+        id: sha
+        run: |
+          echo "linux_x86_64=$(cat pikoclaw-linux-x86_64/pikoclaw-linux-x86_64.sha256)" >> $GITHUB_OUTPUT
+          echo "macos_x86_64=$(cat pikoclaw-macos-x86_64/pikoclaw-macos-x86_64.sha256)" >> $GITHUB_OUTPUT
+          echo "macos_aarch64=$(cat pikoclaw-macos-aarch64/pikoclaw-macos-aarch64.sha256)" >> $GITHUB_OUTPUT
+
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: PikoClaw/homebrew-pikoclaw
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-pikoclaw
+
+      - name: Update formula
+        env:
+          VERSION: ${{ github.ref_name }}
+          SHA_LINUX_X86_64: ${{ steps.sha.outputs.linux_x86_64 }}
+          SHA_MACOS_X86_64: ${{ steps.sha.outputs.macos_x86_64 }}
+          SHA_MACOS_AARCH64: ${{ steps.sha.outputs.macos_aarch64 }}
+        run: |
+          VERSION="${VERSION#v}"
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" homebrew-pikoclaw/Formula/pikoclaw.rb
+          sed -i "/pikoclaw-macos-aarch64/{n;s/sha256 \".*\"/sha256 \"${SHA_MACOS_AARCH64}\"/}" homebrew-pikoclaw/Formula/pikoclaw.rb
+          sed -i "/pikoclaw-macos-x86_64/{n;s/sha256 \".*\"/sha256 \"${SHA_MACOS_X86_64}\"/}" homebrew-pikoclaw/Formula/pikoclaw.rb
+          sed -i "/pikoclaw-linux-x86_64/{n;s/sha256 \".*\"/sha256 \"${SHA_LINUX_X86_64}\"/}" homebrew-pikoclaw/Formula/pikoclaw.rb
+
+      - name: Commit and push
+        working-directory: homebrew-pikoclaw
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/pikoclaw.rb
+          git commit -m "pikoclaw ${{ github.ref_name }}"
+          git push
