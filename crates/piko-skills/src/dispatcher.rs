@@ -2,8 +2,15 @@ use crate::registry::SkillRegistry;
 
 #[derive(Debug, Clone)]
 pub enum DispatchResult {
-    Skill { name: String, rendered_prompt: Option<String>, args: Vec<String> },
-    BuiltIn { name: String, args: Vec<String> },
+    Skill {
+        name: String,
+        rendered_prompt: Option<String>,
+        args: Vec<String>,
+    },
+    BuiltIn {
+        name: String,
+        args: Vec<String>,
+    },
     NotACommand,
 }
 
@@ -22,7 +29,10 @@ impl SkillDispatcher {
             "exit".to_string(),
             "quit".to_string(),
         ];
-        Self { registry, built_ins }
+        Self {
+            registry,
+            built_ins,
+        }
     }
 
     pub fn dispatch(&self, input: &str) -> DispatchResult {

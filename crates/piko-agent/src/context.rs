@@ -1,5 +1,5 @@
 use piko_types::message::{ContentBlock, Message, Role, ToolResultContent};
-use piko_types::tool::{ToolCall, ToolResult};
+use piko_types::tool::ToolResult;
 
 pub struct ConversationContext {
     pub system_prompt: Option<String>,

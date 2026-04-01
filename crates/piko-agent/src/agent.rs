@@ -1,6 +1,6 @@
 use crate::agent_loop::run_turn;
 use crate::context::ConversationContext;
-use crate::output::{AgentEvent, OutputSink, StdoutSink};
+use crate::output::{OutputSink, StdoutSink};
 use anyhow::Result;
 use piko_api::AnthropicClient;
 use piko_config::config::PikoConfig;
@@ -53,7 +53,8 @@ impl Agent {
         let client = AnthropicClient::new(api_key)?;
         let tools = ToolRegistry::with_defaults();
 
-        let policy = PermissionPolicy::from_config(&piko_config::config::PermissionsConfig::default());
+        let policy =
+            PermissionPolicy::from_config(&piko_config::config::PermissionsConfig::default());
         let permissions: Arc<dyn PermissionChecker> = if config.bypass_permissions {
             Arc::new(DefaultPermissionChecker::bypass())
         } else {

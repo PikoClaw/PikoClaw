@@ -1,7 +1,10 @@
 use crate::events::AppEvent;
 use anyhow::Result;
+use async_trait::async_trait;
 use crossterm::event::{self, Event};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use crossterm::ExecutableCommand;
 use piko_agent::agent::Agent;
 use piko_agent::output::{AgentEvent, OutputSink};
@@ -11,7 +14,6 @@ use ratatui::Terminal;
 use std::io::{stdout, Stdout};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use async_trait::async_trait;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AppState {
@@ -88,7 +90,10 @@ impl App {
         result
     }
 
-    async fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    async fn event_loop(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    ) -> Result<()> {
         use crate::render::render;
 
         loop {
@@ -123,7 +128,8 @@ impl App {
         use crossterm::event::{KeyCode, KeyModifiers};
 
         match (key.code, key.modifiers) {
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('c'), KeyModifiers::CONTROL)
+            | (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
                 self.state = AppState::Exiting;
             }
             (KeyCode::Enter, _) if self.state == AppState::Running => {
@@ -171,15 +177,23 @@ impl App {
                 "help" => {
                     self.messages.push(ChatMessage {
                         role: MessageRole::System,
-                        content: "Commands: /help, /clear, /model <name>, /compact, /exit".to_string(),
+                        content: "Commands: /help, /clear, /model <name>, /compact, /exit"
+                            .to_string(),
                     });
                 }
                 _ => {}
             },
-            DispatchResult::Skill { rendered_prompt: Some(prompt), .. } => {
+            DispatchResult::Skill {
+                rendered_prompt: Some(prompt),
+                ..
+            } => {
                 self.run_agent_turn(prompt).await?;
             }
-            DispatchResult::NotACommand | DispatchResult::Skill { rendered_prompt: None, .. } | DispatchResult::BuiltIn { .. } => {
+            DispatchResult::NotACommand
+            | DispatchResult::Skill {
+                rendered_prompt: None,
+                ..
+            } => {
                 self.run_agent_turn(input).await?;
             }
         }

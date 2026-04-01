@@ -2,7 +2,7 @@ use crate::tool_trait::{Tool, ToolContext};
 use async_trait::async_trait;
 use piko_types::tool::{ToolDefinition, ToolInputSchema, ToolResult};
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 pub struct FileWriteTool;
@@ -46,7 +46,8 @@ impl Tool for FileWriteTool {
             Err(e) => return ToolResult::error("", format!("invalid input: {}", e)),
         };
 
-        let tool_use_id = input.get("__tool_use_id")
+        let tool_use_id = input
+            .get("__tool_use_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -55,7 +56,10 @@ impl Tool for FileWriteTool {
 
         if let Some(parent) = path.parent() {
             if let Err(e) = fs::create_dir_all(parent).await {
-                return ToolResult::error(tool_use_id, format!("failed to create directories: {}", e));
+                return ToolResult::error(
+                    tool_use_id,
+                    format!("failed to create directories: {}", e),
+                );
             }
         }
 
@@ -64,19 +68,27 @@ impl Tool for FileWriteTool {
                 tool_use_id,
                 format!("wrote {} bytes to {}", parsed.content.len(), path.display()),
             ),
-            Err(e) => ToolResult::error(tool_use_id, format!("failed to write {}: {}", path.display(), e)),
+            Err(e) => ToolResult::error(
+                tool_use_id,
+                format!("failed to write {}: {}", path.display(), e),
+            ),
         }
     }
 
     fn description_for_permission(&self, input: &serde_json::Value) -> String {
-        let path = input.get("file_path")
+        let path = input
+            .get("file_path")
             .and_then(|v| v.as_str())
             .unwrap_or("<unknown>");
         format!("write to file: {}", path)
     }
 }
 
-fn resolve_path(cwd: &PathBuf, path: &str) -> PathBuf {
+fn resolve_path(cwd: &Path, path: &str) -> PathBuf {
     let p = PathBuf::from(path);
-    if p.is_absolute() { p } else { cwd.join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        cwd.join(p)
+    }
 }

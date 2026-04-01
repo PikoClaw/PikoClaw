@@ -1,7 +1,7 @@
 use async_trait::async_trait;
+use piko_config::config::PermissionMode;
 use piko_permissions::checker::{PermissionChecker, PermissionDecision, PermissionRequest};
 use piko_permissions::policy::PermissionPolicy;
-use piko_config::config::PermissionMode;
 use std::sync::Arc;
 
 pub struct TuiPermissionChecker {

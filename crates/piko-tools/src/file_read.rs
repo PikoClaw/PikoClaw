@@ -2,7 +2,7 @@ use crate::tool_trait::{Tool, ToolContext};
 use async_trait::async_trait;
 use piko_types::tool::{ToolDefinition, ToolInputSchema, ToolResult};
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 pub struct FileReadTool;
@@ -53,7 +53,8 @@ impl Tool for FileReadTool {
             Err(e) => return ToolResult::error("", format!("invalid input: {}", e)),
         };
 
-        let tool_use_id = input.get("__tool_use_id")
+        let tool_use_id = input
+            .get("__tool_use_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -64,7 +65,10 @@ impl Tool for FileReadTool {
             Ok(content) => {
                 let lines: Vec<&str> = content.lines().collect();
                 let start = parsed.offset.unwrap_or(1).saturating_sub(1);
-                let end = parsed.limit.map(|l| (start + l).min(lines.len())).unwrap_or(lines.len());
+                let end = parsed
+                    .limit
+                    .map(|l| (start + l).min(lines.len()))
+                    .unwrap_or(lines.len());
 
                 let numbered: String = lines[start..end]
                     .iter()
@@ -75,7 +79,10 @@ impl Tool for FileReadTool {
 
                 ToolResult::success(tool_use_id, numbered)
             }
-            Err(e) => ToolResult::error(tool_use_id, format!("failed to read {}: {}", path.display(), e)),
+            Err(e) => ToolResult::error(
+                tool_use_id,
+                format!("failed to read {}: {}", path.display(), e),
+            ),
         }
     }
 
@@ -84,7 +91,7 @@ impl Tool for FileReadTool {
     }
 }
 
-fn resolve_path(cwd: &PathBuf, path: &str) -> PathBuf {
+fn resolve_path(cwd: &Path, path: &str) -> PathBuf {
     let p = PathBuf::from(path);
     if p.is_absolute() {
         p

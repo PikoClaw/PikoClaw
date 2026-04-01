@@ -39,7 +39,8 @@ impl FilesystemSessionStore {
 #[async_trait]
 impl SessionStore for FilesystemSessionStore {
     async fn save(&self, session: &Session) -> Result<()> {
-        fs::create_dir_all(&self.base_dir).await
+        fs::create_dir_all(&self.base_dir)
+            .await
             .context("failed to create sessions directory")?;
 
         let path = self.session_path(&session.id);

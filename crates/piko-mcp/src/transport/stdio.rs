@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
 pub struct StdioTransport {
-    child: Child,
+    _child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
 }
@@ -21,7 +21,11 @@ impl StdioTransport {
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
 
-        Ok(Self { child, stdin, stdout })
+        Ok(Self {
+            _child: child,
+            stdin,
+            stdout,
+        })
     }
 
     pub async fn send(&mut self, request: &JsonRpcRequest) -> Result<JsonRpcResponse> {

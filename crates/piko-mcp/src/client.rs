@@ -25,9 +25,7 @@ impl McpClient {
                 client.initialize().await?;
                 Ok(client)
             }
-            McpTransportConfig::Sse { .. } => {
-                Err(anyhow!("SSE transport not yet implemented"))
-            }
+            McpTransportConfig::Sse { .. } => Err(anyhow!("SSE transport not yet implemented")),
         }
     }
 
@@ -57,9 +55,8 @@ impl McpClient {
             return Err(anyhow!("MCP error {}: {}", err.code, err.message));
         }
 
-        let result: McpListToolsResult = serde_json::from_value(
-            resp.result.unwrap_or(Value::Object(Default::default())),
-        )?;
+        let result: McpListToolsResult =
+            serde_json::from_value(resp.result.unwrap_or(Value::Object(Default::default())))?;
         Ok(result)
     }
 
@@ -77,9 +74,8 @@ impl McpClient {
             return Err(anyhow!("MCP error {}: {}", err.code, err.message));
         }
 
-        let result: McpCallToolResult = serde_json::from_value(
-            resp.result.unwrap_or(Value::Object(Default::default())),
-        )?;
+        let result: McpCallToolResult =
+            serde_json::from_value(resp.result.unwrap_or(Value::Object(Default::default())))?;
         Ok(result)
     }
 

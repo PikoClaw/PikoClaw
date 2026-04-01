@@ -19,7 +19,8 @@ impl DefaultPermissionChecker {
     }
 
     pub fn bypass() -> Self {
-        let policy = PermissionPolicy::from_config(&piko_config::config::PermissionsConfig::default());
+        let policy =
+            PermissionPolicy::from_config(&piko_config::config::PermissionsConfig::default());
         Self {
             policy: Arc::new(policy),
             bypass_all: true,

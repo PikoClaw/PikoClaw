@@ -3,5 +3,5 @@ pub mod defaults;
 pub mod env;
 pub mod loader;
 
-pub use config::{ApiConfig, PikoConfig, PermissionMode, TuiConfig};
+pub use config::{ApiConfig, PermissionMode, PikoConfig, TuiConfig};
 pub use loader::load_config;

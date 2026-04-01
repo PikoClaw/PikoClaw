@@ -5,8 +5,14 @@ use piko_types::tool::{ToolCall, ToolResult};
 pub enum AgentEvent {
     TextChunk(String),
     ToolCallStarted(ToolCall),
-    ToolCallCompleted { call: ToolCall, result: ToolResult },
-    TurnComplete { input_tokens: u32, output_tokens: u32 },
+    ToolCallCompleted {
+        call: ToolCall,
+        result: ToolResult,
+    },
+    TurnComplete {
+        input_tokens: u32,
+        output_tokens: u32,
+    },
     Error(String),
 }
 
@@ -34,7 +40,10 @@ impl OutputSink for StdoutSink {
                     eprintln!("[{}] error: {}", call.name, result.content);
                 }
             }
-            AgentEvent::TurnComplete { input_tokens, output_tokens } => {
+            AgentEvent::TurnComplete {
+                input_tokens,
+                output_tokens,
+            } => {
                 eprintln!("\n[tokens: in={} out={}]", input_tokens, output_tokens);
             }
             AgentEvent::Error(msg) => {

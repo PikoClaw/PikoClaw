@@ -1,10 +1,9 @@
 use crate::error::ApiError;
 use crate::request::MessagesRequest;
 use crate::response::{ApiErrorResponse, MessagesResponse};
-use crate::stream::{parse_sse_line, EventStream, StreamEvent};
-use futures_util::{Stream, StreamExt};
+use crate::stream::{parse_sse_line, EventStream};
+use futures_util::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
-use std::pin::Pin;
 use tracing::{debug, warn};
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -21,10 +20,16 @@ impl AnthropicClient {
         Self::with_base_url(api_key, DEFAULT_BASE_URL)
     }
 
-    pub fn with_base_url(api_key: impl Into<String>, base_url: impl Into<String>) -> Result<Self, ApiError> {
+    pub fn with_base_url(
+        api_key: impl Into<String>,
+        base_url: impl Into<String>,
+    ) -> Result<Self, ApiError> {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers.insert("anthropic-version", HeaderValue::from_static(ANTHROPIC_VERSION));
+        headers.insert(
+            "anthropic-version",
+            HeaderValue::from_static(ANTHROPIC_VERSION),
+        );
 
         let http = reqwest::Client::builder()
             .default_headers(headers)
@@ -112,7 +117,10 @@ impl AnthropicClient {
     }
 
     pub async fn messages(&self, request: MessagesRequest) -> Result<MessagesResponse, ApiError> {
-        let req = MessagesRequest { stream: false, ..request };
+        let req = MessagesRequest {
+            stream: false,
+            ..request
+        };
 
         let resp = self
             .http
@@ -138,7 +146,10 @@ impl AnthropicClient {
             let message = serde_json::from_str::<ApiErrorResponse>(&body)
                 .map(|e| e.error.message)
                 .unwrap_or(body);
-            return Err(ApiError::ApiResponse { status: status.as_u16(), message });
+            return Err(ApiError::ApiResponse {
+                status: status.as_u16(),
+                message,
+            });
         }
 
         let response: MessagesResponse = serde_json::from_str(&body)?;

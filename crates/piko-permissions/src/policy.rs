@@ -43,9 +43,8 @@ impl PermissionPolicy {
             })
             .collect();
 
-        let compiled_rules = CompiledRules::compile(&rules).unwrap_or_else(|_| {
-            CompiledRules::compile(&[]).unwrap()
-        });
+        let compiled_rules =
+            CompiledRules::compile(&rules).unwrap_or_else(|_| CompiledRules::compile(&[]).unwrap());
 
         Self {
             tool_modes,

@@ -2,7 +2,7 @@ use piko_types::model::ModelId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PikoConfig {
     pub api: ApiConfig,
     pub permissions: PermissionsConfig,
@@ -49,7 +49,7 @@ pub struct TuiConfig {
     pub syntax_highlight: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct McpConfig {
     pub servers: Vec<McpServerConfig>,
 }

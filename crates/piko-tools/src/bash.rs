@@ -55,7 +55,8 @@ impl Tool for BashTool {
 
         debug!("executing bash command: {}", parsed.command);
 
-        let tool_use_id = input.get("__tool_use_id")
+        let tool_use_id = input
+            .get("__tool_use_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -94,17 +95,26 @@ impl Tool for BashTool {
                 } else {
                     ToolResult::error(
                         tool_use_id,
-                        format!("exit code {}\nstdout: {}\nstderr: {}", exit_code, stdout.trim_end(), stderr.trim_end()),
+                        format!(
+                            "exit code {}\nstdout: {}\nstderr: {}",
+                            exit_code,
+                            stdout.trim_end(),
+                            stderr.trim_end()
+                        ),
                     )
                 }
             }
             Ok(Err(e)) => ToolResult::error(tool_use_id, format!("failed to execute: {}", e)),
-            Err(_) => ToolResult::error(tool_use_id, format!("command timed out after {}ms", parsed.timeout_ms)),
+            Err(_) => ToolResult::error(
+                tool_use_id,
+                format!("command timed out after {}ms", parsed.timeout_ms),
+            ),
         }
     }
 
     fn description_for_permission(&self, input: &serde_json::Value) -> String {
-        let cmd = input.get("command")
+        let cmd = input
+            .get("command")
             .and_then(|v| v.as_str())
             .unwrap_or("<unknown>");
         format!("run bash command: {}", cmd)

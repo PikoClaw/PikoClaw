@@ -1,16 +1,5 @@
-use crate::config::{ApiConfig, McpConfig, PermissionMode, PermissionsConfig, PikoConfig, TuiConfig};
+use crate::config::{ApiConfig, PermissionMode, PermissionsConfig, TuiConfig};
 use piko_types::model::ModelId;
-
-impl Default for PikoConfig {
-    fn default() -> Self {
-        Self {
-            api: ApiConfig::default(),
-            permissions: PermissionsConfig::default(),
-            tui: TuiConfig::default(),
-            mcp: McpConfig::default(),
-        }
-    }
-}
 
 impl Default for ApiConfig {
     fn default() -> Self {
@@ -41,14 +30,6 @@ impl Default for TuiConfig {
         Self {
             theme: "dark".to_string(),
             syntax_highlight: true,
-        }
-    }
-}
-
-impl Default for McpConfig {
-    fn default() -> Self {
-        Self {
-            servers: Vec::new(),
         }
     }
 }

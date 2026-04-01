@@ -66,7 +66,8 @@ impl Tool for WebFetchTool {
             Err(e) => return ToolResult::error("", format!("invalid input: {}", e)),
         };
 
-        let tool_use_id = input.get("__tool_use_id")
+        let tool_use_id = input
+            .get("__tool_use_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -83,7 +84,8 @@ impl Tool for WebFetchTool {
             return ToolResult::error(tool_use_id, format!("HTTP {}", status));
         }
 
-        let content_type = resp.headers()
+        let content_type = resp
+            .headers()
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("")
@@ -101,7 +103,11 @@ impl Tool for WebFetchTool {
         };
 
         let truncated = if text.len() > max_length {
-            format!("{}\n...(truncated at {} chars)", &text[..max_length], max_length)
+            format!(
+                "{}\n...(truncated at {} chars)",
+                &text[..max_length],
+                max_length
+            )
         } else {
             text
         };
@@ -136,7 +142,12 @@ fn html_to_text(html: &str) -> String {
                     in_script = tag_lower.starts_with("script");
                 } else if tag_lower.starts_with("style") || tag_lower.starts_with("/style") {
                     in_style = tag_lower.starts_with("style");
-                } else if tag_lower.starts_with("br") || tag_lower.starts_with("p") || tag_lower.starts_with("/p") || tag_lower.starts_with("div") || tag_lower.starts_with("/div") {
+                } else if tag_lower.starts_with("br")
+                    || tag_lower.starts_with("p")
+                    || tag_lower.starts_with("/p")
+                    || tag_lower.starts_with("div")
+                    || tag_lower.starts_with("/div")
+                {
                     result.push('\n');
                 }
                 tag_buf.clear();
@@ -147,12 +158,24 @@ fn html_to_text(html: &str) -> String {
         } else if !in_script && !in_style {
             if ch == '&' {
                 let rest = &html[i..];
-                if rest.starts_with("&amp;") { result.push('&'); i += 4; }
-                else if rest.starts_with("&lt;") { result.push('<'); i += 3; }
-                else if rest.starts_with("&gt;") { result.push('>'); i += 3; }
-                else if rest.starts_with("&nbsp;") { result.push(' '); i += 5; }
-                else if rest.starts_with("&quot;") { result.push('"'); i += 5; }
-                else { result.push(ch); }
+                if rest.starts_with("&amp;") {
+                    result.push('&');
+                    i += 4;
+                } else if rest.starts_with("&lt;") {
+                    result.push('<');
+                    i += 3;
+                } else if rest.starts_with("&gt;") {
+                    result.push('>');
+                    i += 3;
+                } else if rest.starts_with("&nbsp;") {
+                    result.push(' ');
+                    i += 5;
+                } else if rest.starts_with("&quot;") {
+                    result.push('"');
+                    i += 5;
+                } else {
+                    result.push(ch);
+                }
             } else {
                 result.push(ch);
             }

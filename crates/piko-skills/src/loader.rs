@@ -6,8 +6,7 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 
 pub fn skills_dir() -> Option<PathBuf> {
-    ProjectDirs::from("dev", "pikoclaw", "pikoclaw")
-        .map(|dirs| dirs.config_dir().join("skills"))
+    ProjectDirs::from("dev", "pikoclaw", "pikoclaw").map(|dirs| dirs.config_dir().join("skills"))
 }
 
 pub fn load_user_skills(registry: &mut SkillRegistry) -> Result<()> {
@@ -38,12 +37,12 @@ pub fn load_user_skills(registry: &mut SkillRegistry) -> Result<()> {
 fn load_skill_file(path: &Path) -> Result<Skill> {
     let content = std::fs::read_to_string(path)?;
 
-    let (frontmatter, body) = if content.starts_with("---\n") {
-        let end = content[4..].find("\n---").map(|i| i + 4);
+    let (frontmatter, body) = if let Some(rest) = content.strip_prefix("---\n") {
+        let end = rest.find("\n---");
         match end {
             Some(end_idx) => {
-                let fm = &content[4..end_idx];
-                let body = content[end_idx + 4..].trim().to_string();
+                let fm = &rest[..end_idx];
+                let body = rest[end_idx + 4..].trim().to_string();
                 (fm.to_string(), body)
             }
             None => (String::new(), content.clone()),
@@ -61,8 +60,8 @@ fn load_skill_file(path: &Path) -> Result<Skill> {
         args: Vec<String>,
     }
 
-    let fm: FrontMatter = toml::from_str(&frontmatter)
-        .map_err(|e| anyhow::anyhow!("invalid frontmatter: {}", e))?;
+    let fm: FrontMatter =
+        toml::from_str(&frontmatter).map_err(|e| anyhow::anyhow!("invalid frontmatter: {}", e))?;
 
     Ok(Skill {
         name: fm.name,

@@ -31,7 +31,10 @@ impl ToolRegistry {
     }
 
     pub fn with_defaults() -> Self {
-        use crate::{bash::BashTool, file_edit::FileEditTool, file_read::FileReadTool, file_write::FileWriteTool, glob::GlobTool, grep::GrepTool};
+        use crate::{
+            bash::BashTool, file_edit::FileEditTool, file_read::FileReadTool,
+            file_write::FileWriteTool, glob::GlobTool, grep::GrepTool,
+        };
 
         let mut registry = Self::new();
         registry.register(Arc::new(BashTool));

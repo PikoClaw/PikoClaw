@@ -4,7 +4,7 @@ use ignore::WalkBuilder;
 use piko_types::tool::{ToolDefinition, ToolInputSchema, ToolResult};
 use regex::RegexBuilder;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct GrepTool;
 
@@ -70,7 +70,8 @@ impl Tool for GrepTool {
             Err(e) => return ToolResult::error("", format!("invalid input: {}", e)),
         };
 
-        let tool_use_id = input.get("__tool_use_id")
+        let tool_use_id = input
+            .get("__tool_use_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -80,7 +81,9 @@ impl Tool for GrepTool {
             .build()
         {
             Ok(r) => r,
-            Err(e) => return ToolResult::error(tool_use_id, format!("invalid regex pattern: {}", e)),
+            Err(e) => {
+                return ToolResult::error(tool_use_id, format!("invalid regex pattern: {}", e))
+            }
         };
 
         let search_path = match &parsed.path {
@@ -142,7 +145,11 @@ impl Tool for GrepTool {
                 let start = line_idx.saturating_sub(parsed.context);
                 let end = (line_idx + parsed.context + 1).min(lines.len());
 
-                for i in start..end {
+                for (i, line) in lines[start..end]
+                    .iter()
+                    .enumerate()
+                    .map(|(j, l)| (start + j, l))
+                {
                     if shown.insert(i) {
                         let prefix = if i == line_idx { ">" } else { " " };
                         file_results.push(format!(
@@ -150,7 +157,7 @@ impl Tool for GrepTool {
                             prefix,
                             file_path.display(),
                             i + 1,
-                            lines[i]
+                            line
                         ));
                         if i == line_idx {
                             match_count += 1;
@@ -178,7 +185,11 @@ impl Tool for GrepTool {
     }
 }
 
-fn resolve_path(cwd: &PathBuf, path: &str) -> PathBuf {
+fn resolve_path(cwd: &Path, path: &str) -> PathBuf {
     let p = PathBuf::from(path);
-    if p.is_absolute() { p } else { cwd.join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        cwd.join(p)
+    }
 }

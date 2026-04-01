@@ -4,7 +4,7 @@ use globset::{Glob, GlobSetBuilder};
 use ignore::WalkBuilder;
 use piko_types::tool::{ToolDefinition, ToolInputSchema, ToolResult};
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct GlobTool;
 
@@ -48,7 +48,8 @@ impl Tool for GlobTool {
             Err(e) => return ToolResult::error("", format!("invalid input: {}", e)),
         };
 
-        let tool_use_id = input.get("__tool_use_id")
+        let tool_use_id = input
+            .get("__tool_use_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -60,14 +61,18 @@ impl Tool for GlobTool {
 
         let glob = match Glob::new(&parsed.pattern) {
             Ok(g) => g,
-            Err(e) => return ToolResult::error(tool_use_id, format!("invalid glob pattern: {}", e)),
+            Err(e) => {
+                return ToolResult::error(tool_use_id, format!("invalid glob pattern: {}", e))
+            }
         };
 
         let mut builder = GlobSetBuilder::new();
         builder.add(glob);
         let glob_set = match builder.build() {
             Ok(g) => g,
-            Err(e) => return ToolResult::error(tool_use_id, format!("failed to build glob: {}", e)),
+            Err(e) => {
+                return ToolResult::error(tool_use_id, format!("failed to build glob: {}", e))
+            }
         };
 
         let mut matches: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
@@ -88,7 +93,8 @@ impl Tool for GlobTool {
                 let path = entry.path();
                 let relative = path.strip_prefix(&search_dir).unwrap_or(path);
                 if glob_set.is_match(relative) || glob_set.is_match(path) {
-                    let mtime = entry.metadata()
+                    let mtime = entry
+                        .metadata()
                         .ok()
                         .and_then(|m| m.modified().ok())
                         .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
@@ -116,7 +122,11 @@ impl Tool for GlobTool {
     }
 }
 
-fn resolve_path(cwd: &PathBuf, path: &str) -> PathBuf {
+fn resolve_path(cwd: &Path, path: &str) -> PathBuf {
     let p = PathBuf::from(path);
-    if p.is_absolute() { p } else { cwd.join(p) }
+    if p.is_absolute() {
+        p
+    } else {
+        cwd.join(p)
+    }
 }

@@ -1,8 +1,8 @@
 mod cli;
 
 use anyhow::{anyhow, Result};
-use cli::{Cli, Commands};
 use clap::Parser;
+use cli::{Cli, Commands};
 use piko_agent::agent::{Agent, AgentConfig};
 use piko_config::loader::load_config;
 use piko_session::fs_store::FilesystemSessionStore;
@@ -22,8 +22,7 @@ async fn main() -> Result<()> {
     let log_level = if cli.debug { "debug" } else { "warn" };
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new(log_level)),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level)),
         )
         .with_target(false)
         .without_time()
@@ -40,7 +39,9 @@ async fn main() -> Result<()> {
         .api_key
         .clone()
         .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-        .ok_or_else(|| anyhow!("ANTHROPIC_API_KEY not set. Set it via environment variable or config file."))?;
+        .ok_or_else(|| {
+            anyhow!("ANTHROPIC_API_KEY not set. Set it via environment variable or config file.")
+        })?;
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -50,7 +51,8 @@ async fn main() -> Result<()> {
             let mut agent = Agent::new(agent_config, &api_key)?;
             let store = Arc::new(FilesystemSessionStore::with_default_path());
 
-            let session = SessionStore::load(store.as_ref(), session_id).await?
+            let session = SessionStore::load(store.as_ref(), session_id)
+                .await?
                 .ok_or_else(|| anyhow!("session '{}' not found", session_id))?;
 
             agent = agent.with_session_store(store).with_session(session);
@@ -62,7 +64,9 @@ async fn main() -> Result<()> {
             let mut agent = Agent::new(agent_config, &api_key)?;
             let store = Arc::new(FilesystemSessionStore::with_default_path());
 
-            if let Some(session) = SessionStore::latest_for_cwd(store.as_ref(), &cwd.to_string_lossy()).await? {
+            if let Some(session) =
+                SessionStore::latest_for_cwd(store.as_ref(), &cwd.to_string_lossy()).await?
+            {
                 agent = agent.with_session_store(store).with_session(session);
             } else {
                 let session = piko_session::session::Session::new(
@@ -105,7 +109,11 @@ async fn run_interactive(agent: Agent, _cli: &Cli) -> Result<()> {
     app.run().await
 }
 
-fn build_agent_config(config: &piko_config::config::PikoConfig, cli: &Cli, cwd: PathBuf) -> AgentConfig {
+fn build_agent_config(
+    config: &piko_config::config::PikoConfig,
+    cli: &Cli,
+    cwd: PathBuf,
+) -> AgentConfig {
     AgentConfig {
         model: config.api.model.clone(),
         max_tokens: config.api.max_tokens,

@@ -1,7 +1,7 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use anyhow::Result;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct SessionIndex {
@@ -30,7 +30,8 @@ impl SessionIndex {
     }
 
     pub fn set_latest(&mut self, cwd: &str, session_id: &str) {
-        self.latest_by_cwd.insert(cwd.to_string(), session_id.to_string());
+        self.latest_by_cwd
+            .insert(cwd.to_string(), session_id.to_string());
     }
 
     pub fn get_latest(&self, cwd: &str) -> Option<&str> {
