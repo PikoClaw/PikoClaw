@@ -1,0 +1,18 @@
+[build]
+target-dir = "target"
+
+[profile.dev]
+debug = 1
+
+[profile.release]
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+
+[alias]
+b = "build"
+br = "build --release"
+t = "test"
+c = "check"
+cl = "clippy"

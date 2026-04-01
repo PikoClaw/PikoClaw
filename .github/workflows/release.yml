@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: pikoclaw-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: pikoclaw-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: pikoclaw-macos-aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get install -y musl-tools
+
+      - run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename artifact
+        run: cp target/${{ matrix.target }}/release/pikoclaw ${{ matrix.artifact }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            pikoclaw-linux-x86_64/pikoclaw-linux-x86_64
+            pikoclaw-macos-x86_64/pikoclaw-macos-x86_64
+            pikoclaw-macos-aarch64/pikoclaw-macos-aarch64
