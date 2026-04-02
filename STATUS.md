@@ -31,6 +31,7 @@
 - Syntax highlighting for code blocks in TUI output (syntect / TextMate grammars, 190+ languages)
 - Welcome header on launch (versioned border, Clawd pixel-art, model/cwd info, tips and recent activity panels)
 - Fixed `/theme` slash command not dispatching as built-in
+- Rate limit display in status bar
 - Fixed dark theme background (full-frame bg fill so terminal default doesn't bleed through)
 
 ## Todo
@@ -39,7 +40,6 @@
 - Image and screenshot input support
 - Hooks system (user-defined shell commands triggered on tool events)
 - Extended thinking support
-- Rate limit display in status bar
 - `/resume` command from within the TUI (currently only via CLI)
 - MCP resource reading (`ListResources`, `ReadResource`)
 - Configurable output styles
