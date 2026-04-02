@@ -2,7 +2,6 @@
 
 <img src="PikoClaw.png" height="200" />
 
-[![Crates.io](https://img.shields.io/crates/v/pikoclaw.svg)](https://crates.io/crates/pikoclaw)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml/badge.svg)](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org)

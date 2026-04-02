@@ -123,16 +123,3 @@ jobs:
           git add Formula/pikoclaw.rb
           git commit -m "pikoclaw ${{ github.ref_name }}"
           git push
-
-  publish-crates:
-    name: Publish to crates.io
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-workspaces
-        run: cargo install cargo-workspaces
-      - name: Publish workspace crates
-        run: cargo workspaces publish --from-git --yes --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
