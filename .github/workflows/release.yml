@@ -24,6 +24,9 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: pikoclaw-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: pikoclaw-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -38,11 +41,21 @@ jobs:
 
       - run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Rename artifact
+      - name: Rename artifact (Unix)
+        if: runner.os != 'Windows'
         run: cp target/${{ matrix.target }}/release/pikoclaw ${{ matrix.artifact }}
 
-      - name: Compute SHA256
+      - name: Rename artifact (Windows)
+        if: runner.os == 'Windows'
+        run: cp target/${{ matrix.target }}/release/pikoclaw.exe ${{ matrix.artifact }}
+
+      - name: Compute SHA256 (Unix)
+        if: runner.os != 'Windows'
         run: shasum -a 256 ${{ matrix.artifact }} | awk '{print $1}' > ${{ matrix.artifact }}.sha256
+
+      - name: Compute SHA256 (Windows)
+        if: runner.os == 'Windows'
+        run: certutil -hashfile ${{ matrix.artifact }} SHA256 | findstr /v "hash" | findstr /v "CertUtil" > ${{ matrix.artifact }}.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -66,6 +79,7 @@ jobs:
             pikoclaw-linux-x86_64/pikoclaw-linux-x86_64
             pikoclaw-macos-x86_64/pikoclaw-macos-x86_64
             pikoclaw-macos-aarch64/pikoclaw-macos-aarch64
+            pikoclaw-windows-x86_64.exe/pikoclaw-windows-x86_64.exe
 
   update-tap:
     name: Update Homebrew Tap
