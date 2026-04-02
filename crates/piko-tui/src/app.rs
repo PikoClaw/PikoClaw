@@ -50,6 +50,12 @@ pub struct App {
     pub total_cache_read_tokens: u32,
     /// Active theme (resolved from config or set at runtime via /theme).
     pub theme: &'static Theme,
+    /// Show the welcome header until the first message is sent.
+    pub show_header: bool,
+    /// Model name for header display.
+    pub model_name: String,
+    /// Working directory for header display.
+    pub cwd: String,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +88,17 @@ impl App {
         let (ask_tx, permission_ask_rx) = mpsc::unbounded_channel::<PermissionAsk>();
         let (question_tx, question_rx) = mpsc::unbounded_channel::<AskQuestion>();
 
+        let model_name = agent.config.model.as_str().to_string();
+        let cwd = {
+            let raw = agent.config.cwd.to_string_lossy();
+            let home = std::env::var("HOME").unwrap_or_default();
+            if !home.is_empty() && raw.starts_with(&home) {
+                format!("~{}", &raw[home.len()..])
+            } else {
+                raw.into_owned()
+            }
+        };
+
         let policy = PermissionPolicy::from_config(&PermissionsConfig::default());
         let checker = Arc::new(TuiPermissionChecker::new(policy, ask_tx));
         agent = agent.with_permission_checker(checker);
@@ -110,6 +127,9 @@ impl App {
             total_cache_creation_tokens: 0,
             total_cache_read_tokens: 0,
             theme: theme::by_name(theme_name),
+            show_header: true,
+            model_name,
+            cwd,
         }
     }
 
@@ -277,6 +297,7 @@ impl App {
     }
 
     async fn submit_input(&mut self, input: String) -> Result<()> {
+        self.show_header = false;
         match self.dispatcher.dispatch(&input) {
             DispatchResult::BuiltIn { name, args } => match name.as_str() {
                 "exit" | "quit" => {

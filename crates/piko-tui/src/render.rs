@@ -2,7 +2,7 @@ use crate::app::{App, AppState, MessageRole};
 use crate::highlight::{highlight_code, parse_segments, Segment};
 use crate::theme::Theme;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Wrap},
@@ -21,6 +21,12 @@ pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let t = app.theme;
 
+    // Paint the full-frame background so terminal default doesn't bleed through.
+    frame.render_widget(
+        Block::default().style(Style::default().bg(t.bg)),
+        area,
+    );
+
     // 3-row vertical layout: messages | status | input
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -31,7 +37,11 @@ pub fn render(frame: &mut Frame, app: &App) {
         ])
         .split(area);
 
-    render_messages(frame, app, chunks[0], t);
+    if app.show_header {
+        render_header(frame, chunks[0], app);
+    } else {
+        render_messages(frame, app, chunks[0], t);
+    }
     render_status_bar(frame, app, chunks[1], t);
 
     match app.state {
@@ -50,7 +60,7 @@ fn render_messages(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t:
         .flat_map(|msg| message_to_list_items(&msg.role, &msg.content, t))
         .collect();
 
-    let list = List::new(items);
+    let list = List::new(items).style(Style::default().bg(t.bg));
     frame.render_widget(list, area);
 }
 
@@ -306,6 +316,7 @@ fn render_input_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t
     frame.render_widget(
         Paragraph::new(content)
             .block(block)
+            .style(Style::default().bg(t.bg))
             .wrap(Wrap { trim: false }),
         area,
     );
@@ -414,4 +425,140 @@ fn render_question_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::R
     } else {
         render_input_bar(frame, app, area, t);
     }
+}
+
+// ── Welcome header ────────────────────────────────────────────────────────────
+
+fn render_header(frame: &mut Frame, area: Rect, app: &App) {
+    let t = app.theme;
+    let width = area.width;
+
+    let version = env!("CARGO_PKG_VERSION");
+    let title = Span::styled(
+        format!(" PikoClaw v{} ", version),
+        Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+    );
+
+    let outer_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(t.claude))
+        .title(title)
+        .style(Style::default().bg(t.bg));
+
+    let inner = outer_block.inner(area);
+    frame.render_widget(outer_block, area);
+
+    if width >= 70 {
+        let left_width = 38u16;
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(left_width), Constraint::Min(1)])
+            .split(inner);
+        render_header_left(frame, cols[0], app);
+        render_header_right(frame, cols[1], app);
+    } else {
+        render_header_left(frame, inner, app);
+    }
+}
+
+fn render_header_left(frame: &mut Frame, area: Rect, app: &App) {
+    let t = app.theme;
+    let mut lines: Vec<Line> = Vec::new();
+
+    lines.push(Line::from(Span::styled(
+        "Welcome back!",
+        Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    // Clawd pixel-art: row 1 = head/eyes, row 2 = body, row 3 = feet
+    lines.push(Line::from(vec![
+        Span::styled(" ▐", Style::default().fg(t.claude)),
+        Span::styled("▛███▜", Style::default().fg(t.claude).bg(t.user_msg_bg)),
+        Span::styled("▌", Style::default().fg(t.claude)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("▝▜", Style::default().fg(t.claude)),
+        Span::styled("█████", Style::default().fg(t.claude).bg(t.user_msg_bg)),
+        Span::styled("▛▘", Style::default().fg(t.claude)),
+    ]));
+    lines.push(Line::from(Span::styled(
+        "  ▘▘ ▝▝  ",
+        Style::default().fg(t.claude),
+    )));
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled(&app.model_name, Style::default().fg(t.inactive)),
+        Span::styled(" · Claude API", Style::default().fg(t.inactive)),
+    ]));
+    lines.push(Line::from(Span::styled(
+        &app.cwd,
+        Style::default().fg(t.inactive),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(Text::from(lines))
+            .style(Style::default().bg(t.bg))
+            .wrap(Wrap { trim: false }),
+        area,
+    );
+}
+
+fn render_header_right(frame: &mut Frame, area: Rect, app: &App) {
+    let t = app.theme;
+
+    // Vertical divider on left edge
+    let divider_area = Rect { x: area.x, y: area.y, width: 1, height: area.height };
+    let content_area = Rect {
+        x: area.x + 2,
+        y: area.y,
+        width: area.width.saturating_sub(2),
+        height: area.height,
+    };
+
+    let div_lines: Vec<Line> = (0..divider_area.height)
+        .map(|_| Line::from(Span::styled("│", Style::default().fg(t.subtle))))
+        .collect();
+    frame.render_widget(
+        Paragraph::new(Text::from(div_lines)).style(Style::default().bg(t.bg)),
+        divider_area,
+    );
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    lines.push(Line::from(Span::styled(
+        "Tips for getting started",
+        Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::styled(
+        "Run /help to see available commands",
+        Style::default().fg(t.text),
+    )));
+    lines.push(Line::from(Span::styled(
+        "Use /theme [name] to change the color theme",
+        Style::default().fg(t.text),
+    )));
+    lines.push(Line::from(Span::styled(
+        "Use /model <name> to switch models",
+        Style::default().fg(t.text),
+    )));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(Span::styled(
+        "Recent activity",
+        Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::styled(
+        "No recent activity",
+        Style::default().fg(t.inactive),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(Text::from(lines))
+            .style(Style::default().bg(t.bg))
+            .wrap(Wrap { trim: false }),
+        content_area,
+    );
 }

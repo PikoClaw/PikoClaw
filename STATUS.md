@@ -29,6 +29,9 @@
 - First-run onboarding (full-screen theme picker with live preview and colour swatches)
 - Theme persisted to config file (`~/.config/pikoclaw/config.toml`) after onboarding
 - Syntax highlighting for code blocks in TUI output (syntect / TextMate grammars, 190+ languages)
+- Welcome header on launch (versioned border, Clawd pixel-art, model/cwd info, tips and recent activity panels)
+- Fixed `/theme` slash command not dispatching as built-in
+- Fixed dark theme background (full-frame bg fill so terminal default doesn't bleed through)
 
 ## Todo
 

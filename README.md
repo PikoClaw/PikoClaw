@@ -1,6 +1,6 @@
 # PikoClaw
 
-<img src="PikoClaw.png" height="200" />
+<img src="docs/PikoClaw.png" height="200" />
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml/badge.svg)](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml)
@@ -12,6 +12,20 @@
 High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
 
 Ultra lightweight (~6-7 MB) and blazing fast.
+
+## Interface
+
+<img src="docs/interface.png" width="800" />
+
+## Themes
+
+| Dark | Light |
+|---|---|
+| <img src="docs/theme_dark.png" width="380" /> | <img src="docs/theme_light.png" width="380" /> |
+| <img src="docs/theme_dark_accessible.png" width="380" /> | <img src="docs/theme_light_accessible.png" width="380" /> |
+| <img src="docs/theme_dark_ansi.png" width="380" /> | <img src="docs/theme_light_ansi.png" width="380" /> |
+
+Switch themes with `/theme [name]` — available names: `dark`, `light`, `dark-daltonized`, `light-daltonized`, `dark-ansi`, `light-ansi`.
 
 ## Install
 
@@ -113,7 +127,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 |---|---|
 | `/help` | List available commands |
 | `/clear` | Clear conversation history |
-| `/model <name>` | Switch model mid-session |
+| `/model <name>` | Switch model mid-session (`sonnet`, `opus`, `haiku`) |
+| `/theme [name]` | Cycle themes or set by name |
 | `/compact` | Summarize history to reduce token usage |
 | `/exit` | Exit |
 

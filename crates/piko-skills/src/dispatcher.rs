@@ -26,6 +26,7 @@ impl SkillDispatcher {
             "clear".to_string(),
             "model".to_string(),
             "compact".to_string(),
+            "theme".to_string(),
             "exit".to_string(),
             "quit".to_string(),
         ];

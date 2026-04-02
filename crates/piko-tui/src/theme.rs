@@ -27,6 +27,8 @@ pub struct Theme {
     pub user_msg_bg: Color,
     /// Status bar background
     pub status_bg: Color,
+    /// Main content area background
+    pub bg: Color,
 }
 
 // ── Theme definitions ──────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ pub const DARK: Theme = Theme {
     warning: Color::Rgb(255, 193, 7),
     user_msg_bg: Color::Rgb(55, 55, 55),
     status_bg: Color::Rgb(20, 20, 20),
+    bg: Color::Rgb(13, 13, 13),
 };
 
 /// Light theme — soft backgrounds, dark text.
@@ -63,6 +66,7 @@ pub const LIGHT: Theme = Theme {
     warning: Color::Rgb(160, 110, 0),
     user_msg_bg: Color::Rgb(230, 230, 230),
     status_bg: Color::Rgb(210, 210, 210),
+    bg: Color::Rgb(253, 253, 253),
 };
 
 /// Dark daltonized — deuteranopia-friendly dark theme (replaces red/green with blue/orange).
@@ -80,6 +84,7 @@ pub const DARK_DALTONIZED: Theme = Theme {
     warning: Color::Rgb(220, 220, 0),
     user_msg_bg: Color::Rgb(55, 55, 55),
     status_bg: Color::Rgb(20, 20, 20),
+    bg: Color::Rgb(13, 13, 13),
 };
 
 /// Light daltonized — deuteranopia-friendly light theme.
@@ -97,6 +102,7 @@ pub const LIGHT_DALTONIZED: Theme = Theme {
     warning: Color::Rgb(140, 120, 0),
     user_msg_bg: Color::Rgb(230, 230, 230),
     status_bg: Color::Rgb(210, 210, 210),
+    bg: Color::Rgb(253, 253, 253),
 };
 
 /// Dark ANSI — uses only the 16-color ANSI palette (portable, low-color terminals).
@@ -114,6 +120,7 @@ pub const DARK_ANSI: Theme = Theme {
     warning: Color::Yellow,
     user_msg_bg: Color::DarkGray,
     status_bg: Color::Black,
+    bg: Color::Black,
 };
 
 /// Light ANSI — uses only the 16-color ANSI palette on a light terminal.
@@ -131,6 +138,7 @@ pub const LIGHT_ANSI: Theme = Theme {
     warning: Color::Yellow,
     user_msg_bg: Color::Gray,
     status_bg: Color::LightCyan,
+    bg: Color::White,
 };
 
 // ── Registry ───────────────────────────────────────────────────────────────
