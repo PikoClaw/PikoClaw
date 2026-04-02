@@ -22,10 +22,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     let t = app.theme;
 
     // Paint the full-frame background so terminal default doesn't bleed through.
-    frame.render_widget(
-        Block::default().style(Style::default().bg(t.bg)),
-        area,
-    );
+    frame.render_widget(Block::default().style(Style::default().bg(t.bg)), area);
 
     // 3-row vertical layout: messages | status | input
     let chunks = Layout::default()
@@ -464,39 +461,31 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_header_left(frame: &mut Frame, area: Rect, app: &App) {
     let t = app.theme;
-    let mut lines: Vec<Line> = Vec::new();
-
-    lines.push(Line::from(Span::styled(
-        "Welcome back!",
-        Style::default().fg(t.text).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
-
     // Clawd pixel-art: row 1 = head/eyes, row 2 = body, row 3 = feet
-    lines.push(Line::from(vec![
-        Span::styled(" ▐", Style::default().fg(t.claude)),
-        Span::styled("▛███▜", Style::default().fg(t.claude).bg(t.user_msg_bg)),
-        Span::styled("▌", Style::default().fg(t.claude)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::styled("▝▜", Style::default().fg(t.claude)),
-        Span::styled("█████", Style::default().fg(t.claude).bg(t.user_msg_bg)),
-        Span::styled("▛▘", Style::default().fg(t.claude)),
-    ]));
-    lines.push(Line::from(Span::styled(
-        "  ▘▘ ▝▝  ",
-        Style::default().fg(t.claude),
-    )));
-
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled(&app.model_name, Style::default().fg(t.inactive)),
-        Span::styled(" · Claude API", Style::default().fg(t.inactive)),
-    ]));
-    lines.push(Line::from(Span::styled(
-        &app.cwd,
-        Style::default().fg(t.inactive),
-    )));
+    let lines: Vec<Line> = vec![
+        Line::from(Span::styled(
+            "Welcome back!",
+            Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(" ▐", Style::default().fg(t.claude)),
+            Span::styled("▛███▜", Style::default().fg(t.claude).bg(t.user_msg_bg)),
+            Span::styled("▌", Style::default().fg(t.claude)),
+        ]),
+        Line::from(vec![
+            Span::styled("▝▜", Style::default().fg(t.claude)),
+            Span::styled("█████", Style::default().fg(t.claude).bg(t.user_msg_bg)),
+            Span::styled("▛▘", Style::default().fg(t.claude)),
+        ]),
+        Line::from(Span::styled("  ▘▘ ▝▝  ", Style::default().fg(t.claude))),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(&app.model_name, Style::default().fg(t.inactive)),
+            Span::styled(" · Claude API", Style::default().fg(t.inactive)),
+        ]),
+        Line::from(Span::styled(&app.cwd, Style::default().fg(t.inactive))),
+    ];
 
     frame.render_widget(
         Paragraph::new(Text::from(lines))
@@ -510,7 +499,12 @@ fn render_header_right(frame: &mut Frame, area: Rect, app: &App) {
     let t = app.theme;
 
     // Vertical divider on left edge
-    let divider_area = Rect { x: area.x, y: area.y, width: 1, height: area.height };
+    let divider_area = Rect {
+        x: area.x,
+        y: area.y,
+        width: 1,
+        height: area.height,
+    };
     let content_area = Rect {
         x: area.x + 2,
         y: area.y,
@@ -526,34 +520,33 @@ fn render_header_right(frame: &mut Frame, area: Rect, app: &App) {
         divider_area,
     );
 
-    let mut lines: Vec<Line> = Vec::new();
-
-    lines.push(Line::from(Span::styled(
-        "Tips for getting started",
-        Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(Span::styled(
-        "Run /help to see available commands",
-        Style::default().fg(t.text),
-    )));
-    lines.push(Line::from(Span::styled(
-        "Use /theme [name] to change the color theme",
-        Style::default().fg(t.text),
-    )));
-    lines.push(Line::from(Span::styled(
-        "Use /model <name> to switch models",
-        Style::default().fg(t.text),
-    )));
-    lines.push(Line::from(""));
-
-    lines.push(Line::from(Span::styled(
-        "Recent activity",
-        Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(Span::styled(
-        "No recent activity",
-        Style::default().fg(t.inactive),
-    )));
+    let lines: Vec<Line> = vec![
+        Line::from(Span::styled(
+            "Tips for getting started",
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "Run /help to see available commands",
+            Style::default().fg(t.text),
+        )),
+        Line::from(Span::styled(
+            "Use /theme [name] to change the color theme",
+            Style::default().fg(t.text),
+        )),
+        Line::from(Span::styled(
+            "Use /model <name> to switch models",
+            Style::default().fg(t.text),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Recent activity",
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            "No recent activity",
+            Style::default().fg(t.inactive),
+        )),
+    ];
 
     frame.render_widget(
         Paragraph::new(Text::from(lines))
