@@ -2,6 +2,9 @@
 name = "piko-tui"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Terminal user interface for PikoClaw"
+repository.workspace = true
 
 [dependencies]
 serde.workspace = true

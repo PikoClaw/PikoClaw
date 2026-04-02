@@ -2,6 +2,9 @@
 name = "piko-skills"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Skills and slash command support for PikoClaw"
+repository.workspace = true
 
 [dependencies]
 serde.workspace = true

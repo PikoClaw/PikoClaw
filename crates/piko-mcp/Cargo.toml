@@ -2,6 +2,9 @@
 name = "piko-mcp"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Model Context Protocol (MCP) integration for PikoClaw"
+repository.workspace = true
 
 [dependencies]
 serde.workspace = true

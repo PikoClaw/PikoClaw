@@ -2,6 +2,9 @@
 name = "piko-types"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Core types and data structures for PikoClaw"
+repository.workspace = true
 
 [dependencies]
 serde.workspace = true

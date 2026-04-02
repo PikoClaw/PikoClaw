@@ -2,6 +2,9 @@
 name = "piko-config"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "Configuration management for PikoClaw"
+repository.workspace = true
 
 [dependencies]
 serde.workspace = true
