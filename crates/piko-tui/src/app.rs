@@ -56,6 +56,8 @@ pub struct App {
     pub model_name: String,
     /// Working directory for header display.
     pub cwd: String,
+    /// Set when a 429 is received; cleared once the instant passes.
+    pub rate_limit_until: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +132,7 @@ impl App {
             show_header: true,
             model_name,
             cwd,
+            rate_limit_until: None,
         }
     }
 
@@ -487,6 +490,19 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: format!("Error: {}", msg),
+                });
+            }
+            AgentEvent::RateLimit { retry_after } => {
+                let reset_in = retry_after.unwrap_or(60);
+                self.rate_limit_until =
+                    Some(std::time::Instant::now() + std::time::Duration::from_secs(reset_in));
+                self.messages.push(ChatMessage {
+                    role: MessageRole::System,
+                    content: format!(
+                        "Rate limited · resets in {}m {}s",
+                        reset_in / 60,
+                        reset_in % 60
+                    ),
                 });
             }
         }

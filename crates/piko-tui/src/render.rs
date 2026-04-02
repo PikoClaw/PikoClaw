@@ -210,9 +210,42 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, 
         String::new()
     };
 
+    // Rate limit display: show countdown if active, clear once expired.
+    let rate_limit_part = if let Some(until) = app.rate_limit_until {
+        let now = std::time::Instant::now();
+        if until > now {
+            let secs = (until - now).as_secs() + 1;
+            format!(
+                " · ⏸ rate limited · resets in {}m {:02}s",
+                secs / 60,
+                secs % 60
+            )
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let rate_limit_color = if app
+        .rate_limit_until
+        .map(|u| u > std::time::Instant::now())
+        .unwrap_or(false)
+    {
+        t.warning
+    } else {
+        t.subtle
+    };
+
     let left_spans = vec![
         Span::styled(format!(" {} ", spinner), Style::default().fg(state_color)),
         Span::styled(token_part, Style::default().fg(t.subtle)),
+        Span::styled(
+            rate_limit_part,
+            Style::default()
+                .fg(rate_limit_color)
+                .add_modifier(Modifier::BOLD),
+        ),
     ];
 
     let right_spans = vec![Span::styled(

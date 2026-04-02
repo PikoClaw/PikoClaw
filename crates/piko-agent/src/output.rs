@@ -16,6 +16,10 @@ pub enum AgentEvent {
         cache_read_tokens: u32,
     },
     Error(String),
+    /// API returned 429; retry_after is seconds until the limit resets (if provided).
+    RateLimit {
+        retry_after: Option<u64>,
+    },
 }
 
 #[async_trait]
@@ -55,6 +59,13 @@ impl OutputSink for StdoutSink {
             }
             AgentEvent::Error(msg) => {
                 eprintln!("\nerror: {}", msg);
+            }
+            AgentEvent::RateLimit { retry_after } => {
+                if let Some(secs) = retry_after {
+                    eprintln!("\nrate limited · resets in {}s", secs);
+                } else {
+                    eprintln!("\nrate limited");
+                }
             }
         }
     }

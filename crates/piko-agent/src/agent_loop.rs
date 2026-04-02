@@ -3,6 +3,7 @@ use crate::context::ConversationContext;
 use crate::output::{AgentEvent, OutputSink};
 use anyhow::{anyhow, Result};
 use futures_util::StreamExt;
+use piko_api::error::ApiError;
 use piko_api::request::MessagesRequest;
 use piko_api::stream::{Delta, StreamEvent};
 use piko_api::AnthropicClient;
@@ -79,7 +80,14 @@ pub async fn run_turn(
             let event = match event_result {
                 Ok(e) => e,
                 Err(e) => {
-                    sink.emit(AgentEvent::Error(e.to_string())).await;
+                    if let ApiError::RateLimit { retry_after } = &e {
+                        sink.emit(AgentEvent::RateLimit {
+                            retry_after: *retry_after,
+                        })
+                        .await;
+                    } else {
+                        sink.emit(AgentEvent::Error(e.to_string())).await;
+                    }
                     return Err(e.into());
                 }
             };

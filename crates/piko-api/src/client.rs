@@ -68,9 +68,14 @@ impl AnthropicClient {
             let status = resp.status();
 
             if !status.is_success() {
+                let retry_after = resp
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
                 let body = resp.text().await.unwrap_or_default();
                 if status.as_u16() == 429 {
-                    Err(ApiError::RateLimit { retry_after: None })?;
+                    Err(ApiError::RateLimit { retry_after })?;
                 } else if status.as_u16() == 529 {
                     Err(ApiError::Overloaded)?;
                 } else if status.as_u16() == 401 {
@@ -136,11 +141,16 @@ impl AnthropicClient {
             .await?;
 
         let status = resp.status();
+        let retry_after = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
         let body = resp.text().await?;
 
         if !status.is_success() {
             if status.as_u16() == 429 {
-                return Err(ApiError::RateLimit { retry_after: None });
+                return Err(ApiError::RateLimit { retry_after });
             }
             if status.as_u16() == 529 {
                 return Err(ApiError::Overloaded);
