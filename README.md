@@ -1,6 +1,18 @@
 # PikoClaw
 
+![PikoClaw](PikoClaw.png)
+
+[![Crates.io](https://img.shields.io/crates/v/pikoclaw.svg)](https://crates.io/crates/pikoclaw)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Build](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml/badge.svg)](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml)
+[![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
+[![Platform](https://img.shields.io/badge/platform-macOS%20arm64%20%7C%20macOS%20x86__64%20%7C%20Linux%20x86__64-blue.svg)](#install)
+[![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
+[![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
+
 High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
+
+Ultra lightweight (~6-7 MB) and blazing fast.
 
 ## Install
 
