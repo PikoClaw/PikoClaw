@@ -9,6 +9,8 @@ brew tap PikoClaw/pikoclaw
 brew install pikoclaw
 ```
 
+You can also go to the [latest GitHub Release](https://github.com/PikoClaw/PikoClaw/releases) and download the appropriate binary for your platform.
+
 ## Usage
 
 ```bash
