@@ -47,6 +47,9 @@ pub struct PermissionRule {
 pub struct TuiConfig {
     pub theme: String,
     pub syntax_highlight: bool,
+    /// Set to true after the first-run onboarding wizard completes.
+    #[serde(default)]
+    pub has_completed_onboarding: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -33,4 +33,12 @@ pub fn register_all(registry: &mut SkillRegistry) {
         prompt_template: "Please create a comprehensive summary of our conversation so far, capturing all important context, decisions made, code written, and current state. This summary will replace the full history.".to_string(),
         source: SkillSource::BuiltIn,
     });
+
+    registry.register(Skill {
+        name: "theme".to_string(),
+        description: "Switch UI theme. /theme to cycle, /theme <name> to set (dark, light, dark-daltonized, light-daltonized, dark-ansi, light-ansi)".to_string(),
+        args: vec!["name".to_string()],
+        prompt_template: String::new(),
+        source: SkillSource::BuiltIn,
+    });
 }

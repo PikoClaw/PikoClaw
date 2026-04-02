@@ -42,3 +42,15 @@ fn load_from_file(path: &Path) -> Result<PikoConfig> {
     let config: PikoConfig = toml::from_str(&content)?;
     Ok(config)
 }
+
+/// Persist `config` back to the user's config file.
+/// Creates parent directories if they don't exist yet.
+pub fn save_config(config: &PikoConfig) -> Result<()> {
+    let path = config_path().ok_or_else(|| anyhow::anyhow!("cannot determine config path"))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let content = toml::to_string_pretty(config)?;
+    std::fs::write(&path, content)?;
+    Ok(())
+}

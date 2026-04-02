@@ -30,6 +30,7 @@ impl Default for TuiConfig {
         Self {
             theme: "dark".to_string(),
             syntax_highlight: true,
+            has_completed_onboarding: false,
         }
     }
 }

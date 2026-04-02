@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use cli::{Cli, Commands};
 use piko_agent::agent::{Agent, AgentConfig};
-use piko_config::loader::load_config;
+use piko_config::loader::{load_config, save_config};
 use piko_session::fs_store::FilesystemSessionStore;
 use piko_session::store::SessionStore;
 use piko_skills::dispatcher::SkillDispatcher;
@@ -29,6 +29,17 @@ async fn main() -> Result<()> {
         .init();
 
     let mut config = load_config()?;
+
+    // ── First-run onboarding ───────────────────────────────────────────────
+    // Show the theme picker whenever onboarding hasn't been completed yet.
+    // (Same trigger as claude-code: missing theme or flag not set.)
+    if !config.tui.has_completed_onboarding {
+        let chosen = piko_tui::onboarding::run_theme_picker()?;
+        config.tui.theme = chosen.to_string();
+        config.tui.has_completed_onboarding = true;
+        // Best-effort save; don't abort if the write fails (e.g. read-only FS).
+        let _ = save_config(&config);
+    }
 
     if let Some(ref model) = cli.model {
         config.api.model = piko_types::model::ModelId::from_alias(model);
@@ -57,7 +68,7 @@ async fn main() -> Result<()> {
 
             agent = agent.with_session_store(store).with_session(session);
 
-            run_interactive(agent, &cli).await
+            run_interactive(agent, &cli, &config.tui.theme).await
         }
         Some(Commands::Continue) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
@@ -76,7 +87,7 @@ async fn main() -> Result<()> {
                 agent = agent.with_session_store(store).with_session(session);
             }
 
-            run_interactive(agent, &cli).await
+            run_interactive(agent, &cli, &config.tui.theme).await
         }
         None => {
             if let Some(ref prompt) = cli.print {
@@ -94,18 +105,18 @@ async fn main() -> Result<()> {
                     config.api.model.as_str(),
                 );
                 agent = agent.with_session_store(store).with_session(session);
-                run_interactive(agent, &cli).await
+                run_interactive(agent, &cli, &config.tui.theme).await
             }
         }
     }
 }
 
-async fn run_interactive(agent: Agent, _cli: &Cli) -> Result<()> {
+async fn run_interactive(agent: Agent, _cli: &Cli, theme: &str) -> Result<()> {
     let mut skill_registry = SkillRegistry::with_built_ins();
     let _ = load_user_skills(&mut skill_registry);
     let dispatcher = SkillDispatcher::new(skill_registry);
 
-    let mut app = App::new(agent, dispatcher);
+    let mut app = App::new(agent, dispatcher, theme);
     app.run().await
 }
 

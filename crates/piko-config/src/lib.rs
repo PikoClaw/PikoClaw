@@ -6,4 +6,4 @@ pub mod loader;
 
 pub use claudemd::load_claude_md;
 pub use config::{ApiConfig, PermissionMode, PikoConfig, TuiConfig};
-pub use loader::load_config;
+pub use loader::{load_config, save_config};

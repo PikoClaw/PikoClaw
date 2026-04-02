@@ -24,3 +24,4 @@ piko-skills.workspace = true
 piko-permissions.workspace = true
 piko-tools.workspace = true
 async-trait.workspace = true
+syntect.workspace = true

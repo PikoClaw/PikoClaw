@@ -24,11 +24,15 @@
 - CLAUDE.md loading (`~/.claude/CLAUDE.md`, project `CLAUDE.md`, `.claude/rules/*.md`)
 - Prompt caching (`cache_control: ephemeral` on system prompt, last tool, last message)
 - Token usage tracking and display in TUI status bar (cumulative input/output/cache tokens)
+- Multiple UI themes (dark, light, dark-daltonized, light-daltonized, dark-ansi, light-ansi)
+- `/theme [name]` command (cycle or set theme mid-session; active theme shown in status bar)
+- First-run onboarding (full-screen theme picker with live preview and colour swatches)
+- Theme persisted to config file (`~/.config/pikoclaw/config.toml`) after onboarding
+- Syntax highlighting for code blocks in TUI output (syntect / TextMate grammars, 190+ languages)
 
 ## Todo
 
 - Session list and management commands (`/sessions`, `/delete`)
-- Syntax highlighting for code blocks in TUI output
 - Image and screenshot input support
 - Hooks system (user-defined shell commands triggered on tool events)
 - Extended thinking support

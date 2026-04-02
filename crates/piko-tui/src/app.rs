@@ -1,4 +1,5 @@
 use crate::events::{AppEvent, PermissionPrompt, QuestionPrompt};
+use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -47,6 +48,8 @@ pub struct App {
     pub total_output_tokens: u32,
     pub total_cache_creation_tokens: u32,
     pub total_cache_read_tokens: u32,
+    /// Active theme (resolved from config or set at runtime via /theme).
+    pub theme: &'static Theme,
 }
 
 #[derive(Debug, Clone)]
@@ -74,7 +77,7 @@ impl OutputSink for TuiSink {
 }
 
 impl App {
-    pub fn new(mut agent: Agent, dispatcher: SkillDispatcher) -> Self {
+    pub fn new(mut agent: Agent, dispatcher: SkillDispatcher, theme_name: &str) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (ask_tx, permission_ask_rx) = mpsc::unbounded_channel::<PermissionAsk>();
         let (question_tx, question_rx) = mpsc::unbounded_channel::<AskQuestion>();
@@ -106,6 +109,7 @@ impl App {
             total_output_tokens: 0,
             total_cache_creation_tokens: 0,
             total_cache_read_tokens: 0,
+            theme: theme::by_name(theme_name),
         }
     }
 
@@ -285,9 +289,37 @@ impl App {
                 "help" => {
                     self.messages.push(ChatMessage {
                         role: MessageRole::System,
-                        content: "Commands: /help, /clear, /model <name>, /compact, /exit"
-                            .to_string(),
+                        content:
+                            "Commands: /help, /clear, /model <name>, /theme [name], /compact, /exit"
+                                .to_string(),
                     });
+                }
+                "theme" => {
+                    if let Some(name) = args.first() {
+                        // Set a specific theme by name
+                        let t = theme::by_name(name);
+                        self.theme = t;
+                        self.messages.push(ChatMessage {
+                            role: MessageRole::System,
+                            content: format!("Theme set to «{}»", t.label),
+                        });
+                    } else {
+                        // No arg → cycle to next theme
+                        let t = theme::next(self.theme.name);
+                        self.theme = t;
+                        self.messages.push(ChatMessage {
+                            role: MessageRole::System,
+                            content: format!(
+                                "Theme → «{}»  (available: {})",
+                                t.label,
+                                theme::ALL_THEMES
+                                    .iter()
+                                    .map(|t| t.name)
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        });
+                    }
                 }
                 "compact" => {
                     self.compact_context();
