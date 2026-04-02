@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.80"
 license = "Apache-2.0"
@@ -44,16 +44,16 @@ regex = "1"
 globset = "0.4"
 ignore = "0.4"
 async-stream = "0.3"
-piko-types = { path = "crates/piko-types", version = "0.1.0" }
-piko-config = { path = "crates/piko-config", version = "0.1.0" }
-piko-api = { path = "crates/piko-api", version = "0.1.0" }
-piko-tools = { path = "crates/piko-tools", version = "0.1.0" }
-piko-permissions = { path = "crates/piko-permissions", version = "0.1.0" }
-piko-session = { path = "crates/piko-session", version = "0.1.0" }
-piko-agent = { path = "crates/piko-agent", version = "0.1.0" }
-piko-mcp = { path = "crates/piko-mcp", version = "0.1.0" }
-piko-tui = { path = "crates/piko-tui", version = "0.1.0" }
-piko-skills = { path = "crates/piko-skills", version = "0.1.0" }
+piko-types = { path = "crates/piko-types", version = "0.1.1" }
+piko-config = { path = "crates/piko-config", version = "0.1.1" }
+piko-api = { path = "crates/piko-api", version = "0.1.1" }
+piko-tools = { path = "crates/piko-tools", version = "0.1.1" }
+piko-permissions = { path = "crates/piko-permissions", version = "0.1.1" }
+piko-session = { path = "crates/piko-session", version = "0.1.1" }
+piko-agent = { path = "crates/piko-agent", version = "0.1.1" }
+piko-mcp = { path = "crates/piko-mcp", version = "0.1.1" }
+piko-tui = { path = "crates/piko-tui", version = "0.1.1" }
+piko-skills = { path = "crates/piko-skills", version = "0.1.1" }
 
 [[bin]]
 name = "pikoclaw"
@@ -63,6 +63,9 @@ path = "src/main.rs"
 name = "pikoclaw"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+description = "PikoClaw - A Rust-based AI agent CLI"
+repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
