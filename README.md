@@ -1,6 +1,6 @@
 # PikoClaw
 
-![PikoClaw](PikoClaw.png)
+<img src="PikoClaw.png" height="200" />
 
 [![Crates.io](https://img.shields.io/crates/v/pikoclaw.svg)](https://crates.io/crates/pikoclaw)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
