@@ -1,6 +1,6 @@
 # PikoClaw
 
-High-performance AI agent for developers, written in Rust.
+High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
 
 ## Install
 
