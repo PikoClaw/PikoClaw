@@ -18,6 +18,7 @@ pub struct QuestionPrompt {
 pub enum AppEvent {
     Key(KeyEvent),
     Agent(AgentEvent),
+    AgentDone,
     Tick,
     Quit,
 }

@@ -18,7 +18,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AppState {
@@ -35,7 +35,7 @@ pub struct App {
     pub input: String,
     pub cursor_pos: usize,
     pub scroll: usize,
-    pub agent: Agent,
+    pub agent: Arc<Mutex<Agent>>,
     pub dispatcher: SkillDispatcher,
     pub event_tx: mpsc::UnboundedSender<AppEvent>,
     pub event_rx: mpsc::UnboundedReceiver<AppEvent>,
@@ -94,7 +94,7 @@ impl App {
             input: String::new(),
             cursor_pos: 0,
             scroll: 0,
-            agent,
+            agent: Arc::new(Mutex::new(agent)),
             dispatcher,
             event_tx,
             event_rx,
@@ -163,6 +163,11 @@ impl App {
                 match event {
                     AppEvent::Key(key) => self.handle_key(key).await?,
                     AppEvent::Agent(agent_event) => self.handle_agent_event(agent_event),
+                    AppEvent::AgentDone => {
+                        if self.state == AppState::WaitingForAgent {
+                            self.state = AppState::Running;
+                        }
+                    }
                     AppEvent::Quit => {
                         self.state = AppState::Exiting;
                     }
@@ -275,7 +280,7 @@ impl App {
                 }
                 "clear" => {
                     self.messages.clear();
-                    self.agent.context.messages.clear();
+                    self.agent.blocking_lock().context.messages.clear();
                 }
                 "help" => {
                     self.messages.push(ChatMessage {
@@ -291,15 +296,16 @@ impl App {
                     if let Some(model_name) = args.first() {
                         use piko_types::model::ModelId;
                         let model = ModelId::from_alias(model_name);
-                        self.agent.config.model = model.clone();
+                        self.agent.blocking_lock().config.model = model.clone();
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Model set to {}", model.as_str()),
                         });
                     } else {
+                        let model = self.agent.blocking_lock().config.model.as_str().to_string();
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
-                            content: format!("Current model: {}", self.agent.config.model.as_str()),
+                            content: format!("Current model: {}", model),
                         });
                     }
                 }
@@ -323,8 +329,8 @@ impl App {
     }
 
     fn compact_context(&mut self) {
-        let summary: String = self
-            .agent
+        let mut agent = self.agent.blocking_lock();
+        let summary: String = agent
             .context
             .messages
             .iter()
@@ -355,7 +361,8 @@ impl App {
             .collect::<Vec<_>>()
             .join("\n");
 
-        self.agent.context.messages.clear();
+        agent.context.messages.clear();
+        drop(agent);
         self.messages.clear();
         self.messages.push(ChatMessage {
             role: MessageRole::System,
@@ -371,11 +378,15 @@ impl App {
         self.state = AppState::WaitingForAgent;
 
         let tx = self.event_tx.clone();
-        let sink: Arc<dyn OutputSink> = Arc::new(TuiSink { tx });
-        self.agent.run_turn(&input, sink).await?;
-        if self.state != AppState::AskingPermission && self.state != AppState::AskingQuestion {
-            self.state = AppState::Running;
-        }
+        let sink: Arc<dyn OutputSink> = Arc::new(TuiSink { tx: tx.clone() });
+        let agent = Arc::clone(&self.agent);
+        tokio::spawn(async move {
+            let result = agent.lock().await.run_turn(&input, sink).await;
+            if let Err(e) = result {
+                let _ = tx.send(AppEvent::Agent(AgentEvent::Error(e.to_string())));
+            }
+            let _ = tx.send(AppEvent::AgentDone);
+        });
 
         Ok(())
     }

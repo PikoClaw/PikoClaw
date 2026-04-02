@@ -39,7 +39,7 @@ pub struct MessagesRequest {
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip)]
     pub betas: Option<Vec<String>>,
 }
 
