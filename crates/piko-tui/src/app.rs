@@ -48,6 +48,11 @@ pub struct App {
     pub total_output_tokens: u32,
     pub total_cache_creation_tokens: u32,
     pub total_cache_read_tokens: u32,
+    pub total_cost_usd: f64,
+    /// Number of completed turns in this session.
+    pub turns: usize,
+    /// Optional max session cost in USD. When exceeded, the app exits.
+    pub max_budget_usd: Option<f64>,
     /// Active theme (resolved from config or set at runtime via /theme).
     pub theme: &'static Theme,
     /// Show the welcome header until the first message is sent.
@@ -85,7 +90,8 @@ impl OutputSink for TuiSink {
 }
 
 impl App {
-    pub fn new(mut agent: Agent, dispatcher: SkillDispatcher, theme_name: &str) -> Self {
+    pub fn new(mut agent: Agent, dispatcher: SkillDispatcher, theme_name: &str, max_budget_usd: Option<f64>) -> Self {
+
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (ask_tx, permission_ask_rx) = mpsc::unbounded_channel::<PermissionAsk>();
         let (question_tx, question_rx) = mpsc::unbounded_channel::<AskQuestion>();
@@ -128,6 +134,9 @@ impl App {
             total_output_tokens: 0,
             total_cache_creation_tokens: 0,
             total_cache_read_tokens: 0,
+            total_cost_usd: 0.0,
+            turns: 0,
+            max_budget_usd,
             theme: theme::by_name(theme_name),
             show_header: true,
             model_name,
@@ -308,7 +317,7 @@ impl App {
                 }
                 "clear" => {
                     self.messages.clear();
-                    self.agent.blocking_lock().context.messages.clear();
+                    self.agent.lock().await.context.messages.clear();
                 }
                 "help" => {
                     self.messages.push(ChatMessage {
@@ -348,6 +357,9 @@ impl App {
                 "compact" => {
                     self.compact_context();
                 }
+                "cost" => {
+                    self.show_cost_summary();
+                }
                 "model" => {
                     if let Some(model_name) = args.first() {
                         use piko_types::model::ModelId;
@@ -382,6 +394,55 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    fn show_cost_summary(&mut self) {
+        let pricing = piko_api::get_pricing(&self.model_name);
+        let total = self.total_cost_usd;
+        let input_cost = (self.total_input_tokens as f64 / 1_000_000.0) * pricing.input_per_m;
+        let output_cost = (self.total_output_tokens as f64 / 1_000_000.0) * pricing.output_per_m;
+        let cw_cost =
+            (self.total_cache_creation_tokens as f64 / 1_000_000.0) * pricing.cache_write_per_m;
+        let cr_cost = (self.total_cache_read_tokens as f64 / 1_000_000.0) * pricing.cache_read_per_m;
+        let savings_from_cache = cw_cost + cr_cost;
+
+        let content = if total == 0.0 {
+            "Session Cost Summary\n────────────────────────────────────\nNo turns made yet.".to_string()
+        } else {
+            format!(
+                "Session Cost Summary\n\
+                 ────────────────────────────────────\n\
+                 Model:          {}\n\
+                 Turns:          {}\n\
+                 \n\
+                 Token Usage:\n\
+                 \u{2003} Input:        {}  \u{2192}  {}\n\
+                 \u{2003} Output:       {}  \u{2192}  {}\n\
+                 \u{2003} Cache write:  {}  \u{2192}  {}\n\
+                 \u{2003} Cache read:   {}  \u{2192}  {}\n\
+                 \u{2003}                            {}\n\
+                 \u{2003} Total:                   {}\n\
+                 \n\
+                 Savings from cache: {} (compared to no caching)",
+                self.model_name,
+                self.turns,
+                self.total_input_tokens,
+                piko_api::format_cost(input_cost),
+                self.total_output_tokens,
+                piko_api::format_cost(output_cost),
+                self.total_cache_creation_tokens,
+                piko_api::format_cost(cw_cost),
+                self.total_cache_read_tokens,
+                piko_api::format_cost(cr_cost),
+                "\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
+                piko_api::format_cost(total),
+                piko_api::format_cost(savings_from_cache),
+            )
+        };
+        self.messages.push(ChatMessage {
+            role: MessageRole::System,
+            content,
+        });
     }
 
     fn compact_context(&mut self) {
@@ -481,10 +542,31 @@ impl App {
                 cache_creation_tokens,
                 cache_read_tokens,
             } => {
+                let pricing = piko_api::get_pricing(&self.model_name);
+                let cost = piko_api::calculate_cost_raw(
+                    input_tokens,
+                    output_tokens,
+                    cache_creation_tokens,
+                    cache_read_tokens,
+                    &pricing,
+                );
+                self.total_cost_usd += cost;
                 self.total_input_tokens += input_tokens;
                 self.total_output_tokens += output_tokens;
                 self.total_cache_creation_tokens += cache_creation_tokens;
                 self.total_cache_read_tokens += cache_read_tokens;
+                self.turns += 1;
+                // Budget enforcement check
+                if let Some(max) = self.max_budget_usd {
+                    if self.total_cost_usd >= max {
+                        self.messages.push(ChatMessage {
+                            role: MessageRole::System,
+                            content: format!("Budget limit reached ({}). Session stopped.", piko_api::format_cost(max)),
+                        });
+                        self.state = AppState::Exiting;
+                    }
+                }
+                tracing::debug!("[cost] turn complete: cost_usd={:.4}", cost);
             }
             AgentEvent::Error(msg) => {
                 self.messages.push(ChatMessage {

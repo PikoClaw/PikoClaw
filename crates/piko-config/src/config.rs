@@ -16,6 +16,10 @@ pub struct ApiConfig {
     pub max_tokens: u32,
     pub base_url: String,
     pub api_key: Option<String>,
+    /// Maximum session cost in USD. When accumulated cost reaches this limit, the session stops.
+    /// If None, no budget limit is enforced.
+    #[serde(default)]
+    pub max_budget_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

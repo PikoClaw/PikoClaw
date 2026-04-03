@@ -25,6 +25,10 @@ pub struct Cli {
     #[arg(short = 'n', long, value_name = "NAME")]
     pub name: Option<String>,
 
+    /// Maximum session cost in USD (e.g., 5.00). Session stops when limit is reached.
+    #[arg(long, value_name = "USD")]
+    pub max_budget_usd: Option<f64>,
+
     #[arg(long, value_name = "FORMAT", default_value = "text")]
     pub output_format: String,
 

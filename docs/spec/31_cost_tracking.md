@@ -1,7 +1,7 @@
 # Spec: Cost Tracking & Budget Enforcement
 
-**Status**: ❌ Todo — token counts tracked; USD cost calculation and display missing
-**Rust crate**: `piko-agent`, `piko-tui`, `piko-skills`
+**Status**: ✅ Done — full cost tracking, `/cost` command, status bar display, and budget enforcement
+**Rust crate**: `piko-api` (cost.rs), `piko-tui` (app.rs, render.rs), `piko-config` (config.rs)
 **TS source**: `cost-tracker.ts`, `costHook.ts`, `commands/cost.ts`
 
 ---
@@ -156,14 +156,18 @@ if let Some(max) = config.api.max_budget_usd {
 
 ---
 
+## Implementation Notes
+
+### Location
+- `piko-api/src/cost.rs` — pricing table, cost calculation, `CostTracker`, `BudgetStatus`
+- `piko-tui/src/app.rs` — `total_cost_usd` field, `show_cost_summary()` method, budget exit
+- `piko-tui/src/render.rs` — `$X.XXX` in status bar alongside token counts
+- `crates/piko-config/src/config.rs` — `max_budget_usd` in `ApiConfig`
+- `src/cli.rs` — `--max-budget-usd` CLI flag
+
+### Budget Enforcement
+Budget is checked at TUI level after each `TurnComplete` event. CLI flag takes precedence over config file value; whichever is set (CLI first) is used. App state transitions to `Exiting` when budget exceeded.
+
 ## Todos
 
-- [ ] Add `ModelPricing` table to `piko-agent` or `piko-config`
-- [ ] Implement `CostTracker` struct with per-turn accumulation
-- [ ] Wire `CostTracker` into agent loop after each `TokenUsage` event
-- [ ] Pass cost to TUI via `AgentEvent::TokenUsage { ..., cost_usd: f64 }`
-- [ ] Show cost in status bar alongside token counts
-- [ ] Implement `/cost` slash command with detailed breakdown
-- [ ] Add `--max-budget-usd` CLI flag and `max_budget_usd` config option
-- [ ] Budget enforcement check in agent loop
 - [ ] Update pricing table when Anthropic announces changes

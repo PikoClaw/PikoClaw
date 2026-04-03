@@ -44,6 +44,6 @@ Each file is a dedicated spec for one feature area with implementation todos.
 | [28_mcp_resources.md](28_mcp_resources.md) | MCP Resource Reading (List/Read) | ❌ Todo |
 | [29_session_commands.md](29_session_commands.md) | Session List & Management Commands | ❌ Todo |
 | [30_system_prompt_architecture.md](30_system_prompt_architecture.md) | System Prompt Assembly & Sections | 🔶 Partial |
-| [31_cost_tracking.md](31_cost_tracking.md) | Cost Tracking & Budget Enforcement | ❌ Todo |
+| [31_cost_tracking.md](31_cost_tracking.md) | Cost Tracking & Budget Enforcement | ✅ Done |
 | [32_settings_layers.md](32_settings_layers.md) | Layered Settings & Config Migrations | ❌ Todo |
 | [33_buddy_companion.md](33_buddy_companion.md) | Buddy Companion System (Tamagotchi) | ❌ Todo |

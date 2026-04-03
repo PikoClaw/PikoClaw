@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
 
             agent = agent.with_session_store(store).with_session(session);
 
-            run_interactive(agent, &cli, &config.tui.theme).await
+            run_interactive(agent, &cli, &config).await
         }
         Some(Commands::Continue) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
                 agent = agent.with_session_store(store).with_session(session);
             }
 
-            run_interactive(agent, &cli, &config.tui.theme).await
+            run_interactive(agent, &cli, &config).await
         }
         None => {
             if let Some(ref prompt) = cli.print {
@@ -105,18 +105,19 @@ async fn main() -> Result<()> {
                     config.api.model.as_str(),
                 );
                 agent = agent.with_session_store(store).with_session(session);
-                run_interactive(agent, &cli, &config.tui.theme).await
+                run_interactive(agent, &cli, &config).await
             }
         }
     }
 }
 
-async fn run_interactive(agent: Agent, _cli: &Cli, theme: &str) -> Result<()> {
+async fn run_interactive(agent: Agent, cli: &Cli, config: &piko_config::config::PikoConfig) -> Result<()> {
     let mut skill_registry = SkillRegistry::with_built_ins();
     let _ = load_user_skills(&mut skill_registry);
     let dispatcher = SkillDispatcher::new(skill_registry);
 
-    let mut app = App::new(agent, dispatcher, theme);
+    let budget = cli.max_budget_usd.or(config.api.max_budget_usd);
+    let mut app = App::new(agent, dispatcher, &config.tui.theme, budget);
     app.run().await
 }
 

@@ -19,6 +19,7 @@ futures-util.workspace = true
 piko-types.workspace = true
 piko-config.workspace = true
 piko-agent.workspace = true
+piko-api.workspace = true
 piko-session.workspace = true
 piko-skills.workspace = true
 piko-permissions.workspace = true

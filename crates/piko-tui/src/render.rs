@@ -194,18 +194,22 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, 
         };
         if cache_pct > 0 {
             format!(
-                " · ↑{} ↓{} ({}% cached)",
+                " · ↑{} ↓{} ({}% cached) · {}",
                 fmt_tokens(app.total_input_tokens),
                 fmt_tokens(app.total_output_tokens),
-                cache_pct
+                cache_pct,
+                piko_api::format_cost(app.total_cost_usd)
             )
         } else {
             format!(
-                " · ↑{} ↓{}",
+                " · ↑{} ↓{} · {}",
                 fmt_tokens(app.total_input_tokens),
-                fmt_tokens(app.total_output_tokens)
+                fmt_tokens(app.total_output_tokens),
+                piko_api::format_cost(app.total_cost_usd)
             )
         }
+    } else if app.total_cost_usd > 0.0 {
+        format!(" · {}", piko_api::format_cost(app.total_cost_usd))
     } else {
         String::new()
     };
