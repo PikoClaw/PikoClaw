@@ -12,7 +12,7 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', type: 'image/png', href: '/docs/favicon.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#ea580c' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'PikoClaw Docs' }],
@@ -132,8 +132,8 @@ export default defineConfig({
     },
 
     footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2025 PikoClaw',
+      message: 'Released under the Apache 2.0 License.',
+      copyright: 'Copyright © 2026 PikoClaw',
     },
   },
 
