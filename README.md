@@ -1,6 +1,6 @@
 # PikoClaw
 
-<img src="docs/PikoClaw.png" height="200" />
+<img src="docs/images/PikoClaw.png" height="200" />
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml/badge.svg)](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml)
@@ -13,17 +13,26 @@ The Open Source High-performance AI agent for developers, written in Rust. Inspi
 
 Ultra lightweight (~6-7 MB) and blazing fast.
 
+## Origin: The Claude Code Source Leak
+
+On March 31, 2026, Chaofan Shou discovered that Anthropic accidentally shipped the **entire Claude Code source** in a `.map` sourcemap file bundled into the npm package — exposing every file, comment, internal constant, and system prompt to anyone who ran `npm pack`.
+
+PikoClaw was born from a deep-dive into that leaked source. The feature specs and design specs in our docs are derived directly from that research.
+
+- **Derived feature specs**: [`pikoclaw.com/docs/spec/`](https://pikoclaw.com/docs/spec/)
+- **Derived design specs**: [`pikoclaw.com/docs/design-spec/`](https://pikoclaw.com/docs/design-spec/)
+
 ## Interface
 
-<img src="docs/interface.png" width="800" />
+<img src="docs/images/interface.png" width="800" />
 
 ## Themes
 
 | Dark | Light |
 |---|---|
-| <img src="docs/theme_dark.png" width="380" /> | <img src="docs/theme_light.png" width="380" /> |
-| <img src="docs/theme_dark_accessible.png" width="380" /> | <img src="docs/theme_light_accessible.png" width="380" /> |
-| <img src="docs/theme_dark_ansi.png" width="380" /> | <img src="docs/theme_light_ansi.png" width="380" /> |
+| <img src="docs/images/theme_dark.png" width="380" /> | <img src="docs/images/theme_light.png" width="380" /> |
+| <img src="docs/images/theme_dark_accessible.png" width="380" /> | <img src="docs/images/theme_light_accessible.png" width="380" /> |
+| <img src="docs/images/theme_dark_ansi.png" width="380" /> | <img src="docs/images/theme_light_ansi.png" width="380" /> |
 
 Switch themes with `/theme [name]` — available names: `dark`, `light`, `dark-daltonized`, `light-daltonized`, `dark-ansi`, `light-ansi`.
 

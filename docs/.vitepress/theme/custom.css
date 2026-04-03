@@ -1,0 +1,41 @@
+/* PikoClaw brand colors — orange from pikoclaw.com */
+:root {
+  --vp-c-brand-1: #ea580c;
+  --vp-c-brand-2: #c2410c;
+  --vp-c-brand-3: #9a3412;
+  --vp-c-brand-soft: rgba(234, 88, 12, 0.14);
+}
+
+.dark {
+  --vp-c-brand-1: #fb923c;
+  --vp-c-brand-2: #f97316;
+  --vp-c-brand-3: #ea580c;
+  --vp-c-brand-soft: rgba(251, 146, 60, 0.14);
+}
+
+/* Make nav logo text match brand */
+.VPNavBarTitle .title {
+  color: var(--vp-c-brand-1);
+  font-weight: 700;
+}
+
+/* Status badges in spec pages */
+.vp-doc code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Better inline code contrast */
+.vp-doc :not(pre) > code {
+  background-color: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* Sidebar section headers (✅ 🔶 ❌) */
+.VPSidebarItem.level-2 > .item > .text {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vp-c-text-2);
+}
