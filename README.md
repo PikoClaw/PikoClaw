@@ -104,6 +104,18 @@ decision = "deny"
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+## How to Use OpenRouter.ai API Key
+
+- Set these Environment variables in `~/.zshrc` or `~/.bashrc`
+
+```
+export OPENROUTER_API_KEY="sk-or-v1-6exxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
+export ANTHROPIC_API_KEY=""
+export ANTHROPIC_DEFAULT_SONNET_MODEL="stepfun/step-3.5-flash:free" # ADD YOUR OPENROUTER.AI MODEL ID HERE
+```
+
 ## Built-in Tools
 
 | Tool | Description |
