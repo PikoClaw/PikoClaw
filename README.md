@@ -200,7 +200,3 @@ The release.yml workflow will:
 1. Build binaries for macOS arm64, macOS x86_64, Linux x86_64, and Windows x86_64
 2. Create the GitHub release and upload the binaries
 3. Automatically update the SHA256 hashes in homebrew-pikoclaw/Formula/pikoclaw.rb and push it
-
-## Status
-
-See [STATUS.md](STATUS.md) for the full list of completed and planned features.
