@@ -9,7 +9,7 @@
 [![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
 [![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
 
-High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
+The Open Source High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
 
 Ultra lightweight (~6-7 MB) and blazing fast.
 
