@@ -1,3 +1,5 @@
+<div align="center">
+
 # PikoClaw
 
 <img src="docs/images/PikoClaw.png" height="200" />
@@ -8,6 +10,8 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg)](#install)
 [![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
 [![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
+
+</div>
 
 The Open Source High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
 
