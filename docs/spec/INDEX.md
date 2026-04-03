@@ -41,7 +41,7 @@ Each file is a dedicated spec for one feature area with implementation todos.
 | [25_plugins.md](25_plugins.md) | Plugin System & Marketplace | ❌ Todo |
 | [26_output_styles.md](26_output_styles.md) | Configurable Output Styles | ❌ Todo |
 | [27_cron_scheduler.md](27_cron_scheduler.md) | Cron Scheduler & Remote Triggers | ❌ Todo |
-| [28_mcp_resources.md](28_mcp_resources.md) | MCP Resource Reading (List/Read) | ❌ Todo |
+| [28_mcp_resources.md](28_mcp_resources.md) | MCP Resource Reading (List/Read) | ✅ Done |
 | [29_session_commands.md](29_session_commands.md) | Session List & Management Commands | ❌ Todo |
 | [30_system_prompt_architecture.md](30_system_prompt_architecture.md) | System Prompt Assembly & Sections | 🔶 Partial |
 | [31_cost_tracking.md](31_cost_tracking.md) | Cost Tracking & Budget Enforcement | ✅ Done |
