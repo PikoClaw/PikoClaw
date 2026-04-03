@@ -90,8 +90,12 @@ impl OutputSink for TuiSink {
 }
 
 impl App {
-    pub fn new(mut agent: Agent, dispatcher: SkillDispatcher, theme_name: &str, max_budget_usd: Option<f64>) -> Self {
-
+    pub fn new(
+        mut agent: Agent,
+        dispatcher: SkillDispatcher,
+        theme_name: &str,
+        max_budget_usd: Option<f64>,
+    ) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let (ask_tx, permission_ask_rx) = mpsc::unbounded_channel::<PermissionAsk>();
         let (question_tx, question_rx) = mpsc::unbounded_channel::<AskQuestion>();
@@ -403,11 +407,13 @@ impl App {
         let output_cost = (self.total_output_tokens as f64 / 1_000_000.0) * pricing.output_per_m;
         let cw_cost =
             (self.total_cache_creation_tokens as f64 / 1_000_000.0) * pricing.cache_write_per_m;
-        let cr_cost = (self.total_cache_read_tokens as f64 / 1_000_000.0) * pricing.cache_read_per_m;
+        let cr_cost =
+            (self.total_cache_read_tokens as f64 / 1_000_000.0) * pricing.cache_read_per_m;
         let savings_from_cache = cw_cost + cr_cost;
 
         let content = if total == 0.0 {
-            "Session Cost Summary\n────────────────────────────────────\nNo turns made yet.".to_string()
+            "Session Cost Summary\n────────────────────────────────────\nNo turns made yet."
+                .to_string()
         } else {
             format!(
                 "Session Cost Summary\n\
@@ -561,7 +567,10 @@ impl App {
                     if self.total_cost_usd >= max {
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
-                            content: format!("Budget limit reached ({}). Session stopped.", piko_api::format_cost(max)),
+                            content: format!(
+                                "Budget limit reached ({}). Session stopped.",
+                                piko_api::format_cost(max)
+                            ),
                         });
                         self.state = AppState::Exiting;
                     }

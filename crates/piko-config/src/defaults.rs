@@ -10,7 +10,6 @@ impl Default for ApiConfig {
             api_key: None,
             max_budget_usd: None,
         }
-
     }
 }
 

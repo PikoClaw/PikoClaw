@@ -227,7 +227,13 @@ mod tests {
     #[test]
     fn test_budget_status_check() {
         assert!(BudgetStatus::check(0.05, Some(5.0)) == BudgetStatus::Ok);
-        assert!(BudgetStatus::check(5.0, Some(5.0)) == BudgetStatus::Exceeded { limit: 5.0, actual: 5.0 });
+        assert!(
+            BudgetStatus::check(5.0, Some(5.0))
+                == BudgetStatus::Exceeded {
+                    limit: 5.0,
+                    actual: 5.0
+                }
+        );
         assert!(BudgetStatus::check(0.05, None) == BudgetStatus::Ok);
     }
 }

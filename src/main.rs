@@ -111,7 +111,11 @@ async fn main() -> Result<()> {
     }
 }
 
-async fn run_interactive(agent: Agent, cli: &Cli, config: &piko_config::config::PikoConfig) -> Result<()> {
+async fn run_interactive(
+    agent: Agent,
+    cli: &Cli,
+    config: &piko_config::config::PikoConfig,
+) -> Result<()> {
     let mut skill_registry = SkillRegistry::with_built_ins();
     let _ = load_user_skills(&mut skill_registry);
     let dispatcher = SkillDispatcher::new(skill_registry);
