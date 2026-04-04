@@ -29,6 +29,8 @@ impl SkillDispatcher {
             "theme".to_string(),
             "exit".to_string(),
             "quit".to_string(),
+            "plan".to_string(),
+            "cost".to_string(),
         ];
         Self {
             registry,
@@ -71,5 +73,57 @@ impl SkillDispatcher {
         }
 
         DispatchResult::NotACommand
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::SkillRegistry;
+
+    fn make_dispatcher() -> SkillDispatcher {
+        SkillDispatcher::new(SkillRegistry::new())
+    }
+
+    #[test]
+    fn plan_is_builtin() {
+        let d = make_dispatcher();
+        let result = d.dispatch("/plan");
+        assert!(matches!(result, DispatchResult::BuiltIn { ref name, .. } if name == "plan"));
+    }
+
+    #[test]
+    fn cost_is_builtin() {
+        let d = make_dispatcher();
+        let result = d.dispatch("/cost");
+        assert!(matches!(result, DispatchResult::BuiltIn { ref name, .. } if name == "cost"));
+    }
+
+    #[test]
+    fn non_command_returns_not_a_command() {
+        let d = make_dispatcher();
+        let result = d.dispatch("hello world");
+        assert!(matches!(result, DispatchResult::NotACommand));
+    }
+
+    #[test]
+    fn unknown_slash_command_returns_not_a_command() {
+        let d = make_dispatcher();
+        let result = d.dispatch("/nonexistent");
+        assert!(matches!(result, DispatchResult::NotACommand));
+    }
+
+    #[test]
+    fn help_is_builtin() {
+        let d = make_dispatcher();
+        let result = d.dispatch("/help");
+        assert!(matches!(result, DispatchResult::BuiltIn { ref name, .. } if name == "help"));
+    }
+
+    #[test]
+    fn clear_is_builtin() {
+        let d = make_dispatcher();
+        let result = d.dispatch("/clear");
+        assert!(matches!(result, DispatchResult::BuiltIn { ref name, .. } if name == "clear"));
     }
 }

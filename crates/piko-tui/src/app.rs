@@ -16,11 +16,13 @@ use piko_permissions::checker::PermissionDecision;
 use piko_permissions::policy::PermissionPolicy;
 use piko_skills::dispatcher::{DispatchResult, SkillDispatcher};
 use piko_tools::ask_user::{AskQuestion, AskUserQuestionTool};
+use piko_tools::plan_mode::{EnterPlanModeTool, ExitPlanModeTool, PlanModeExitRequest};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AppState {
@@ -28,6 +30,7 @@ pub enum AppState {
     WaitingForAgent,
     AskingPermission,
     AskingQuestion,
+    AskingPlanModeExit,
     Exiting,
 }
 
@@ -66,6 +69,9 @@ pub struct App {
     pub rate_limit_until: Option<std::time::Instant>,
     /// Input history for ↑/↓ navigation (Design Spec 03).
     pub history: InputHistory,
+    pub plan_mode: Arc<AtomicBool>,
+    pub plan_mode_exit_rx: mpsc::UnboundedReceiver<PlanModeExitRequest>,
+    pub pending_plan_mode_exit: Option<oneshot::Sender<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +130,18 @@ impl App {
             .expect("tools arc not unique")
             .register(ask_tool);
 
+        let plan_mode = Arc::new(AtomicBool::new(false));
+        let (plan_exit_tx, plan_mode_exit_rx) = mpsc::unbounded_channel::<PlanModeExitRequest>();
+        let enter_pm = Arc::new(EnterPlanModeTool::new(Arc::clone(&plan_mode)));
+        Arc::get_mut(&mut agent.tools)
+            .expect("tools arc not unique")
+            .register(enter_pm);
+        let exit_pm = Arc::new(ExitPlanModeTool::new(Arc::clone(&plan_mode), plan_exit_tx));
+        Arc::get_mut(&mut agent.tools)
+            .expect("tools arc not unique")
+            .register(exit_pm);
+        agent = agent.with_plan_mode(Arc::clone(&plan_mode));
+
         Self {
             state: AppState::Running,
             messages: Vec::new(),
@@ -151,6 +169,9 @@ impl App {
             cwd,
             rate_limit_until: None,
             history: InputHistory::new(),
+            plan_mode,
+            plan_mode_exit_rx,
+            pending_plan_mode_exit: None,
         }
     }
 
@@ -204,6 +225,11 @@ impl App {
                 self.state = AppState::AskingQuestion;
             }
 
+            while let Ok(req) = self.plan_mode_exit_rx.try_recv() {
+                self.pending_plan_mode_exit = Some(req.reply);
+                self.state = AppState::AskingPlanModeExit;
+            }
+
             while let Ok(event) = self.event_rx.try_recv() {
                 match event {
                     AppEvent::Key(key) => self.handle_key(key).await?,
@@ -230,6 +256,24 @@ impl App {
 
     async fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
         use crossterm::event::{KeyCode, KeyModifiers};
+
+        if self.state == AppState::AskingPlanModeExit {
+            if let Some(reply) = self.pending_plan_mode_exit.take() {
+                let approved = matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y'));
+                let _ = reply.send(approved);
+                let msg = if approved {
+                    "[plan mode] exited — agent can now make changes"
+                } else {
+                    "[plan mode] exit denied — agent continues in plan mode"
+                };
+                self.messages.push(ChatMessage {
+                    role: MessageRole::System,
+                    content: msg.to_string(),
+                });
+                self.state = AppState::WaitingForAgent;
+            }
+            return Ok(());
+        }
 
         if self.state == AppState::AskingQuestion {
             if let Some(prompt) = self.pending_question.take() {
@@ -366,7 +410,7 @@ impl App {
                     self.messages.push(ChatMessage {
                         role: MessageRole::System,
                         content:
-                            "Commands: /help, /clear, /model <name>, /theme [name], /compact, /exit"
+                            "Commands: /help, /clear, /model <name>, /theme [name], /compact, /cost, /plan, /exit"
                                 .to_string(),
                     });
                 }
@@ -399,6 +443,19 @@ impl App {
                 }
                 "compact" => {
                     self.compact_context();
+                }
+                "plan" => {
+                    let now_active = !self.plan_mode.load(Ordering::SeqCst);
+                    self.plan_mode.store(now_active, Ordering::SeqCst);
+                    let msg = if now_active {
+                        "Plan mode enabled. Mutating tools (bash, file_write, file_edit, notebook_edit) are now blocked."
+                    } else {
+                        "Plan mode disabled."
+                    };
+                    self.messages.push(ChatMessage {
+                        role: MessageRole::System,
+                        content: msg.to_string(),
+                    });
                 }
                 "cost" => {
                     self.show_cost_summary();

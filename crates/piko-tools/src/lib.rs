@@ -6,6 +6,7 @@ pub mod file_write;
 pub mod glob;
 pub mod grep;
 pub mod notebook_edit;
+pub mod plan_mode;
 pub mod registry;
 pub mod todo_write;
 pub mod tool_trait;

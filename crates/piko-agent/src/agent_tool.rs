@@ -7,6 +7,7 @@ use piko_api::AnthropicClient;
 use piko_tools::registry::ToolRegistry;
 use piko_tools::tool_trait::{Tool, ToolContext};
 use piko_types::tool::{ToolDefinition, ToolResult};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -95,6 +96,7 @@ impl Tool for AgentTool {
             &sub_config,
             sink,
             cancellation,
+            Arc::new(AtomicBool::new(false)),
         )
         .await
         {

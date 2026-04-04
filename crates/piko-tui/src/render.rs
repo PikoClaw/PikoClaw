@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
+use std::sync::atomic::Ordering;
 
 // ── Spinner frames: same as Claude Code (darwin path) ────────────────────────
 // Forward + reversed = smooth back-and-forth animation
@@ -44,6 +45,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     match app.state {
         AppState::AskingPermission => render_permission_dialog(frame, app, chunks[2], t),
         AppState::AskingQuestion => render_question_dialog(frame, app, chunks[2], t),
+        AppState::AskingPlanModeExit => render_plan_mode_exit_dialog(frame, chunks[2], t),
         _ => render_input_bar(frame, app, chunks[2], t),
     }
 }
@@ -273,6 +275,12 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, 
         t.subtle
     };
 
+    let plan_mode_part = if app.plan_mode.load(Ordering::SeqCst) {
+        " [PLAN MODE]".to_string()
+    } else {
+        String::new()
+    };
+
     let left_spans = vec![
         Span::styled(format!(" {} ", spinner), Style::default().fg(state_color)),
         Span::styled(token_part, Style::default().fg(t.subtle)),
@@ -280,6 +288,12 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, 
             rate_limit_part,
             Style::default()
                 .fg(rate_limit_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            plan_mode_part,
+            Style::default()
+                .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         ),
     ];
@@ -324,6 +338,7 @@ fn current_spinner(app: &App, t: &Theme) -> (String, Color) {
         AppState::Running => (POINTER.to_string(), t.prompt_border),
         AppState::AskingPermission => ("◈".to_string(), t.permission),
         AppState::AskingQuestion => ("?".to_string(), t.permission),
+        AppState::AskingPlanModeExit => ("◑".to_string(), Color::Yellow),
         AppState::Exiting => ("·".to_string(), t.subtle),
     }
 }
@@ -491,6 +506,48 @@ fn render_question_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::R
     } else {
         render_input_bar(frame, app, area, t);
     }
+}
+
+// ── Plan mode exit dialog ─────────────────────────────────────────────────────
+
+fn render_plan_mode_exit_dialog(frame: &mut Frame, area: ratatui::layout::Rect, t: &Theme) {
+    let lines = vec![Line::from(vec![
+        Span::styled(
+            "Agent wants to exit plan mode and begin making changes. ",
+            Style::default().fg(t.text),
+        ),
+        Span::styled(
+            "Allow?",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ])];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(Line::from(vec![
+            Span::styled(" Exit Plan Mode  ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                "(y)",
+                Style::default().fg(t.success).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("es  ", Style::default().fg(t.subtle)),
+            Span::styled(
+                "(n)",
+                Style::default().fg(t.error).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("o ", Style::default().fg(t.subtle)),
+        ]));
+
+    frame.render_widget(
+        Paragraph::new(Text::from(lines))
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 // ── Welcome header ────────────────────────────────────────────────────────────

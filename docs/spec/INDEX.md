@@ -30,7 +30,7 @@ Each file is a dedicated spec for one feature area with implementation todos.
 | [14_vim_keybindings.md](14_vim_keybindings.md) | Vim Mode & Keybinding Customization | ❌ Todo |
 | [15_image_input.md](15_image_input.md) | Image & Screenshot Input | ❌ Todo |
 | [16_memory_memdir.md](16_memory_memdir.md) | Memory / Memdir System | ❌ Todo |
-| [17_plan_mode.md](17_plan_mode.md) | Plan Mode (EnterPlan/ExitPlan tools) | ❌ Todo |
+| [17_plan_mode.md](17_plan_mode.md) | Plan Mode (EnterPlan/ExitPlan tools) | ✅ Done |
 | [18_worktrees.md](18_worktrees.md) | Git Worktree Tools | ❌ Todo |
 | [19_task_system.md](19_task_system.md) | Background Task System (TaskCreate/Get/List/etc.) | ❌ Todo |
 | [20_auto_compact.md](20_auto_compact.md) | Auto-Compact / Context Summarization | ❌ Todo |

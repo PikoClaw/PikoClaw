@@ -1,6 +1,6 @@
 # Spec: Plan Mode
 
-**Status**: ❌ Todo
+**Status**: ✅ Done
 **TS source**: `tools/EnterPlanModeTool.tsx`, `tools/ExitPlanModeTool.tsx`, `commands/plan.ts`
 
 ---

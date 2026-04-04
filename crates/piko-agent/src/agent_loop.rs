@@ -13,9 +13,13 @@ use piko_tools::tool_trait::ToolContext;
 use piko_types::message::ContentBlock;
 use piko_types::tool::{ToolCall, ToolResult};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
+const PLAN_MODE_BLOCKED: &[&str] = &["bash", "file_write", "file_edit", "notebook_edit"];
+
+#[allow(clippy::too_many_arguments)]
 pub async fn run_turn(
     client: &AnthropicClient,
     tools: &ToolRegistry,
@@ -24,6 +28,7 @@ pub async fn run_turn(
     config: &AgentConfig,
     sink: Arc<dyn OutputSink>,
     cancellation: CancellationToken,
+    plan_mode: Arc<AtomicBool>,
 ) -> Result<String> {
     let max_turns = config.max_turns.unwrap_or(50);
     let mut turns = 0;
@@ -227,6 +232,23 @@ pub async fn run_turn(
         for call in &tool_calls {
             sink.emit(AgentEvent::ToolCallStarted(call.clone())).await;
 
+            if plan_mode.load(Ordering::SeqCst) && PLAN_MODE_BLOCKED.contains(&call.name.as_str()) {
+                let result = ToolResult::error(
+                    call.id.clone(),
+                    format!(
+                        "Tool '{}' is blocked in plan mode. Call exit_plan_mode first.",
+                        call.name
+                    ),
+                );
+                sink.emit(AgentEvent::ToolCallCompleted {
+                    call: call.clone(),
+                    result: result.clone(),
+                })
+                .await;
+                tool_results.push(result);
+                continue;
+            }
+
             let tool = match tools.get(&call.name) {
                 Some(t) => t,
                 None => {
@@ -279,4 +301,44 @@ pub async fn run_turn(
     }
 
     Ok(final_text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_mode_blocked_contains_mutating_tools() {
+        assert!(PLAN_MODE_BLOCKED.contains(&"bash"));
+        assert!(PLAN_MODE_BLOCKED.contains(&"file_write"));
+        assert!(PLAN_MODE_BLOCKED.contains(&"file_edit"));
+        assert!(PLAN_MODE_BLOCKED.contains(&"notebook_edit"));
+    }
+
+    #[test]
+    fn plan_mode_blocked_does_not_contain_read_only_tools() {
+        assert!(!PLAN_MODE_BLOCKED.contains(&"file_read"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"glob"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"grep"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"web_fetch"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"web_search"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"AskUserQuestion"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"enter_plan_mode"));
+        assert!(!PLAN_MODE_BLOCKED.contains(&"exit_plan_mode"));
+    }
+
+    #[test]
+    fn plan_mode_flag_starts_false_by_default() {
+        let flag = Arc::new(AtomicBool::new(false));
+        assert!(!flag.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn plan_mode_flag_can_be_toggled() {
+        let flag = Arc::new(AtomicBool::new(false));
+        flag.store(true, Ordering::SeqCst);
+        assert!(flag.load(Ordering::SeqCst));
+        flag.store(false, Ordering::SeqCst);
+        assert!(!flag.load(Ordering::SeqCst));
+    }
 }

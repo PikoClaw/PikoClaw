@@ -12,6 +12,7 @@ use piko_session::store::SessionStore;
 use piko_tools::registry::ToolRegistry;
 use piko_types::model::ModelId;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -50,6 +51,7 @@ pub struct Agent {
     pub context: ConversationContext,
     pub session: Option<Session>,
     pub cancellation: CancellationToken,
+    pub plan_mode: Arc<AtomicBool>,
 }
 
 impl Agent {
@@ -99,6 +101,7 @@ impl Agent {
             context,
             session: None,
             cancellation: CancellationToken::new(),
+            plan_mode: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -118,6 +121,11 @@ impl Agent {
         self
     }
 
+    pub fn with_plan_mode(mut self, plan_mode: Arc<AtomicBool>) -> Self {
+        self.plan_mode = plan_mode;
+        self
+    }
+
     pub async fn run_print(&mut self, prompt: &str) -> Result<String> {
         let sink = Arc::new(StdoutSink);
         self.run_turn(prompt, sink.clone()).await
@@ -134,6 +142,7 @@ impl Agent {
             &self.config,
             sink,
             self.cancellation.clone(),
+            Arc::clone(&self.plan_mode),
         )
         .await?;
 
