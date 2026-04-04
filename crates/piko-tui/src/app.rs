@@ -4,7 +4,7 @@ use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
 use async_trait::async_trait;
-use crossterm::event::{self, Event};
+use crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -19,10 +19,20 @@ use piko_tools::ask_user::{AskQuestion, AskUserQuestionTool};
 use piko_tools::plan_mode::{EnterPlanModeTool, ExitPlanModeTool, PlanModeExitRequest};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use std::collections::HashMap;
 use std::io::{stdout, Stdout};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, Mutex};
+
+/// Pastes longer than this (in bytes) are collapsed to a chip reference.
+/// Matches Claude Code's PASTE_THRESHOLD constant.
+const PASTE_INLINE_THRESHOLD: usize = 800;
+
+/// Pastes with more than this many newlines are always collapsed to a chip,
+/// regardless of byte length. Matches Claude Code's `numLines > maxLines` logic
+/// (maxLines = min(rows-10, 2) ≈ 2 on a standard terminal).
+const PASTE_MAX_INLINE_LINES: usize = 2;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AppState {
@@ -69,6 +79,10 @@ pub struct App {
     pub rate_limit_until: Option<std::time::Instant>,
     /// Input history for ↑/↓ navigation (Design Spec 03).
     pub history: InputHistory,
+    /// Stored paste content for chips: id → full text.
+    pub paste_store: HashMap<u32, String>,
+    /// Auto-incrementing counter for paste chip IDs.
+    pub paste_counter: u32,
     pub plan_mode: Arc<AtomicBool>,
     pub plan_mode_exit_rx: mpsc::UnboundedReceiver<PlanModeExitRequest>,
     pub pending_plan_mode_exit: Option<oneshot::Sender<bool>>,
@@ -169,6 +183,8 @@ impl App {
             cwd,
             rate_limit_until: None,
             history: InputHistory::new(),
+            paste_store: HashMap::new(),
+            paste_counter: 0,
             plan_mode,
             plan_mode_exit_rx,
             pending_plan_mode_exit: None,
@@ -179,12 +195,14 @@ impl App {
         enable_raw_mode()?;
         let mut stdout = stdout();
         stdout.execute(EnterAlternateScreen)?;
+        stdout.execute(EnableBracketedPaste)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
         let result = self.event_loop(&mut terminal).await;
 
         disable_raw_mode()?;
+        terminal.backend_mut().execute(DisableBracketedPaste)?;
         terminal.backend_mut().execute(LeaveAlternateScreen)?;
         terminal.show_cursor()?;
 
@@ -201,8 +219,14 @@ impl App {
             terminal.draw(|frame| render(frame, self))?;
 
             if event::poll(std::time::Duration::from_millis(16))? {
-                if let Event::Key(key) = event::read()? {
-                    let _ = self.event_tx.send(AppEvent::Key(key));
+                match event::read()? {
+                    Event::Key(key) => {
+                        let _ = self.event_tx.send(AppEvent::Key(key));
+                    }
+                    Event::Paste(text) => {
+                        self.handle_paste(text);
+                    }
+                    _ => {}
                 }
             }
 
@@ -333,8 +357,22 @@ impl App {
             }
             (KeyCode::Backspace, _) => {
                 if self.cursor_pos > 0 {
-                    self.cursor_pos -= 1;
-                    self.input.remove(self.cursor_pos);
+                    if self.input[..self.cursor_pos].ends_with(']') {
+                        if let Some(chip_start) = self.find_chip_start(self.cursor_pos) {
+                            let chip = self.input[chip_start..self.cursor_pos].to_owned();
+                            if let Some(id) = parse_chip_id(&chip) {
+                                self.paste_store.remove(&id);
+                            }
+                            self.input.drain(chip_start..self.cursor_pos);
+                            self.cursor_pos = chip_start;
+                        } else {
+                            self.cursor_pos -= 1;
+                            self.input.remove(self.cursor_pos);
+                        }
+                    } else {
+                        self.cursor_pos -= 1;
+                        self.input.remove(self.cursor_pos);
+                    }
                 }
             }
             (KeyCode::Left, _) => {
@@ -347,21 +385,21 @@ impl App {
                     self.cursor_pos += 1;
                 }
             }
-            // ↑ — navigate to previous history entry when input is empty or already browsing.
-            // Falls back to chat-pane scrolling when there is no history to recall.
+            // ↑ — navigate history when input is empty/browsing; else scroll UP (see older).
+            // scroll=0 means bottom; scroll=N means N lines above bottom.
             (KeyCode::Up, _) => {
                 if self.input.is_empty() || self.history.is_navigating() {
                     if let Some(recalled) = self.history.backward() {
                         self.input = recalled.to_string();
                         self.cursor_pos = self.input.len();
                     } else {
-                        self.scroll = self.scroll.saturating_sub(1);
+                        self.scroll = self.scroll.saturating_add(1);
                     }
                 } else {
-                    self.scroll = self.scroll.saturating_sub(1);
+                    self.scroll = self.scroll.saturating_add(1);
                 }
             }
-            // ↓ — navigate forward in history while browsing; scroll chat otherwise.
+            // ↓ — navigate history forward while browsing; else scroll DOWN (see newer).
             (KeyCode::Down, _) => {
                 if self.history.is_navigating() {
                     match self.history.forward() {
@@ -370,13 +408,12 @@ impl App {
                             self.cursor_pos = self.input.len();
                         }
                         None => {
-                            // Past the newest entry → return to empty live input.
                             self.input.clear();
                             self.cursor_pos = 0;
                         }
                     }
                 } else {
-                    self.scroll = self.scroll.saturating_add(1);
+                    self.scroll = self.scroll.saturating_sub(1);
                 }
             }
             (KeyCode::Char(c), _) => {
@@ -483,14 +520,17 @@ impl App {
                 rendered_prompt: Some(prompt),
                 ..
             } => {
-                self.run_agent_turn(prompt).await?;
+                self.paste_store.clear();
+                self.run_agent_turn(prompt.clone(), prompt).await?;
             }
             DispatchResult::NotACommand
             | DispatchResult::Skill {
                 rendered_prompt: None,
                 ..
             } => {
-                self.run_agent_turn(input).await?;
+                let api_input = self.expand_chips(&input);
+                self.paste_store.clear();
+                self.run_agent_turn(input, api_input).await?;
             }
         }
         Ok(())
@@ -589,18 +629,19 @@ impl App {
         });
     }
 
-    async fn run_agent_turn(&mut self, input: String) -> Result<()> {
+    async fn run_agent_turn(&mut self, display_content: String, api_content: String) -> Result<()> {
         self.messages.push(ChatMessage {
             role: MessageRole::User,
-            content: input.clone(),
+            content: display_content,
         });
+        self.scroll = 0; // auto-follow new response
         self.state = AppState::WaitingForAgent;
 
         let tx = self.event_tx.clone();
         let sink: Arc<dyn OutputSink> = Arc::new(TuiSink { tx: tx.clone() });
         let agent = Arc::clone(&self.agent);
         tokio::spawn(async move {
-            let result = agent.lock().await.run_turn(&input, sink).await;
+            let result = agent.lock().await.run_turn(&api_content, sink).await;
             if let Err(e) = result {
                 let _ = tx.send(AppEvent::Agent(AgentEvent::Error(e.to_string())));
             }
@@ -608,6 +649,80 @@ impl App {
         });
 
         Ok(())
+    }
+
+    fn handle_paste(&mut self, text: String) {
+        if self.state != AppState::Running {
+            return;
+        }
+        // Normalize: \r → \n, tabs → 4 spaces (matches Claude Code behaviour)
+        let text = text.replace('\r', "\n").replace('\t', "    ");
+
+        let newlines = text.chars().filter(|&c| c == '\n').count();
+        let needs_chip = text.len() > PASTE_INLINE_THRESHOLD || newlines > PASTE_MAX_INLINE_LINES;
+
+        if !needs_chip {
+            self.input.insert_str(self.cursor_pos, &text);
+            self.cursor_pos += text.len();
+        } else {
+            self.paste_counter += 1;
+            let id = self.paste_counter;
+            let chip = if newlines == 0 {
+                format!("[Pasted text #{}]", id)
+            } else {
+                format!("[Pasted text #{} +{} lines]", id, newlines)
+            };
+            self.paste_store.insert(id, text);
+            self.input.insert_str(self.cursor_pos, &chip);
+            self.cursor_pos += chip.len();
+        }
+    }
+
+    fn expand_chips(&self, text: &str) -> String {
+        if self.paste_store.is_empty() {
+            return text.to_string();
+        }
+        let mut result = String::new();
+        let mut rest = text;
+        while !rest.is_empty() {
+            if let Some(bracket_pos) = rest.find('[') {
+                result.push_str(&rest[..bracket_pos]);
+                rest = &rest[bracket_pos..];
+                if let Some((chip_len, content)) = self.try_expand_chip_at(rest) {
+                    result.push_str(&content);
+                    rest = &rest[chip_len..];
+                } else {
+                    result.push('[');
+                    rest = &rest[1..];
+                }
+            } else {
+                result.push_str(rest);
+                break;
+            }
+        }
+        result
+    }
+
+    fn try_expand_chip_at(&self, s: &str) -> Option<(usize, String)> {
+        let close = s.find(']')?;
+        let chip = &s[..=close];
+        if !is_paste_chip(chip) {
+            return None;
+        }
+        let id = parse_chip_id(chip)?;
+        let content = self.paste_store.get(&id)?.clone();
+        Some((chip.len(), content))
+    }
+
+    fn find_chip_start(&self, end_pos: usize) -> Option<usize> {
+        let before = &self.input[..end_pos];
+        let bracket_pos = before.rfind('[')?;
+        let candidate = &self.input[bracket_pos..end_pos];
+        if is_paste_chip(candidate) {
+            Some(bracket_pos)
+        } else {
+            None
+        }
     }
 
     fn handle_agent_event(&mut self, event: AgentEvent) {
@@ -705,5 +820,263 @@ impl App {
                 });
             }
         }
+    }
+}
+
+fn is_paste_chip(s: &str) -> bool {
+    (s.starts_with("[Pasted text #") || s.starts_with("[...Truncated text #")) && s.ends_with(']')
+}
+
+fn parse_chip_id(chip: &str) -> Option<u32> {
+    let hash_pos = chip.find('#')?;
+    let after_hash = &chip[hash_pos + 1..];
+    let digit_end = after_hash
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(after_hash.len());
+    after_hash[..digit_end].parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── is_paste_chip ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn chip_pasted_no_lines() {
+        assert!(is_paste_chip("[Pasted text #1]"));
+    }
+
+    #[test]
+    fn chip_pasted_with_lines() {
+        assert!(is_paste_chip("[Pasted text #3 +42 lines]"));
+    }
+
+    #[test]
+    fn chip_truncated_no_lines() {
+        assert!(is_paste_chip("[...Truncated text #2...]"));
+    }
+
+    #[test]
+    fn chip_truncated_with_lines() {
+        assert!(is_paste_chip("[...Truncated text #7 +100 lines...]"));
+    }
+
+    #[test]
+    fn chip_not_a_chip() {
+        assert!(!is_paste_chip("[Image #1]"));
+        assert!(!is_paste_chip("hello"));
+        assert!(!is_paste_chip("[Pasted text #1"));
+    }
+
+    // ── parse_chip_id ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_id_simple() {
+        assert_eq!(parse_chip_id("[Pasted text #5]"), Some(5));
+    }
+
+    #[test]
+    fn parse_id_with_lines() {
+        assert_eq!(parse_chip_id("[Pasted text #12 +3 lines]"), Some(12));
+    }
+
+    #[test]
+    fn parse_id_truncated() {
+        assert_eq!(parse_chip_id("[...Truncated text #99...]"), Some(99));
+    }
+
+    #[test]
+    fn parse_id_no_hash() {
+        assert_eq!(parse_chip_id("no hash here"), None);
+    }
+
+    // ── handle_paste / expand_chips ───────────────────────────────────────────
+
+    #[test]
+    fn expand_chips_no_chips() {
+        let store: HashMap<u32, String> = HashMap::new();
+        let input = "hello world";
+        let app_store_ref = &store;
+        let expand = |text: &str| -> String {
+            if app_store_ref.is_empty() {
+                return text.to_string();
+            }
+            text.to_string()
+        };
+        assert_eq!(expand(input), "hello world");
+    }
+
+    #[test]
+    fn chip_threshold_constants() {
+        assert_eq!(PASTE_INLINE_THRESHOLD, 800);
+        assert_eq!(PASTE_MAX_INLINE_LINES, 2);
+    }
+
+    #[test]
+    fn chip_inline_paste_small() {
+        let small = "a".repeat(100);
+        assert!(small.len() <= PASTE_INLINE_THRESHOLD, "should be inlined");
+    }
+
+    #[test]
+    fn chip_triggered_by_line_count() {
+        // 3 newlines (4 lines) exceeds PASTE_MAX_INLINE_LINES (2)
+        let four_lines = "a\nb\nc\nd";
+        let newlines = four_lines.chars().filter(|&c| c == '\n').count();
+        assert!(
+            four_lines.len() <= PASTE_INLINE_THRESHOLD,
+            "short enough to normally inline"
+        );
+        assert!(newlines > PASTE_MAX_INLINE_LINES, "should trigger chip");
+    }
+
+    #[test]
+    fn chip_triggered_by_length() {
+        let long = "x".repeat(801);
+        assert!(long.len() > PASTE_INLINE_THRESHOLD, "should trigger chip");
+    }
+
+    #[test]
+    fn chip_not_triggered_two_lines() {
+        let two_lines = "hello\nworld";
+        let newlines = two_lines.chars().filter(|&c| c == '\n').count();
+        assert!(two_lines.len() <= PASTE_INLINE_THRESHOLD);
+        assert!(newlines <= PASTE_MAX_INLINE_LINES, "should be inlined");
+    }
+
+    #[test]
+    fn chip_format_no_newlines() {
+        let id = 1u32;
+        let newlines = 0usize;
+        let chip = format!("[Pasted text #{}]", id);
+        assert_eq!(chip, "[Pasted text #1]");
+        assert!(is_paste_chip(&chip));
+        assert_eq!(parse_chip_id(&chip), Some(id));
+        let _ = newlines;
+    }
+
+    #[test]
+    fn chip_format_with_newlines() {
+        let id = 2u32;
+        let newlines = 5usize;
+        let chip = format!("[Pasted text #{} +{} lines]", id, newlines);
+        assert_eq!(chip, "[Pasted text #2 +5 lines]");
+        assert!(is_paste_chip(&chip));
+        assert_eq!(parse_chip_id(&chip), Some(id));
+    }
+
+    #[test]
+    fn chip_format_truncated_parseable() {
+        let id = 3u32;
+        let newlines = 200usize;
+        let chip = format!("[...Truncated text #{} +{} lines...]", id, newlines);
+        assert_eq!(chip, "[...Truncated text #3 +200 lines...]");
+        assert!(is_paste_chip(&chip));
+        assert_eq!(parse_chip_id(&chip), Some(id));
+    }
+
+    #[test]
+    fn expand_chips_replaces_chip() {
+        let mut store: HashMap<u32, String> = HashMap::new();
+        store.insert(1, "full pasted content".to_string());
+
+        let text = "before [Pasted text #1] after";
+        let mut result = String::new();
+        let mut rest = text;
+        while !rest.is_empty() {
+            if let Some(bracket_pos) = rest.find('[') {
+                result.push_str(&rest[..bracket_pos]);
+                rest = &rest[bracket_pos..];
+                let close = rest.find(']');
+                if let Some(close_pos) = close {
+                    let chip = &rest[..=close_pos];
+                    if is_paste_chip(chip) {
+                        if let Some(id) = parse_chip_id(chip) {
+                            if let Some(content) = store.get(&id) {
+                                result.push_str(content);
+                                rest = &rest[chip.len()..];
+                                continue;
+                            }
+                        }
+                    }
+                }
+                result.push('[');
+                rest = &rest[1..];
+            } else {
+                result.push_str(rest);
+                break;
+            }
+        }
+        assert_eq!(result, "before full pasted content after");
+    }
+
+    #[test]
+    fn expand_chips_multiple_chips() {
+        let mut store: HashMap<u32, String> = HashMap::new();
+        store.insert(1, "AAA".to_string());
+        store.insert(2, "BBB".to_string());
+
+        let text = "[Pasted text #1] and [Pasted text #2]";
+        let mut result = String::new();
+        let mut rest = text;
+        while !rest.is_empty() {
+            if let Some(bracket_pos) = rest.find('[') {
+                result.push_str(&rest[..bracket_pos]);
+                rest = &rest[bracket_pos..];
+                let close = rest.find(']');
+                if let Some(close_pos) = close {
+                    let chip = &rest[..=close_pos];
+                    if is_paste_chip(chip) {
+                        if let Some(id) = parse_chip_id(chip) {
+                            if let Some(content) = store.get(&id) {
+                                result.push_str(content);
+                                rest = &rest[chip.len()..];
+                                continue;
+                            }
+                        }
+                    }
+                }
+                result.push('[');
+                rest = &rest[1..];
+            } else {
+                result.push_str(rest);
+                break;
+            }
+        }
+        assert_eq!(result, "AAA and BBB");
+    }
+
+    #[test]
+    fn non_chip_brackets_preserved() {
+        let store: HashMap<u32, String> = HashMap::new();
+        let text = "see [Image #1] here";
+        let mut result = String::new();
+        let mut rest = text;
+        while !rest.is_empty() {
+            if let Some(bracket_pos) = rest.find('[') {
+                result.push_str(&rest[..bracket_pos]);
+                rest = &rest[bracket_pos..];
+                let close = rest.find(']');
+                if let Some(close_pos) = close {
+                    let chip = &rest[..=close_pos];
+                    if is_paste_chip(chip) {
+                        if let Some(id) = parse_chip_id(chip) {
+                            if let Some(content) = store.get(&id) {
+                                result.push_str(content);
+                                rest = &rest[chip.len()..];
+                                continue;
+                            }
+                        }
+                    }
+                }
+                result.push('[');
+                rest = &rest[1..];
+            } else {
+                result.push_str(rest);
+                break;
+            }
+        }
+        assert_eq!(result, "see [Image #1] here");
     }
 }

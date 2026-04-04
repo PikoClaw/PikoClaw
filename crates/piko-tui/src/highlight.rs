@@ -192,6 +192,110 @@ pub fn highlight_code(
     lines
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Color;
+
+    fn plain_style() -> Style {
+        Style::default().fg(Color::White)
+    }
+
+    fn code_style() -> Style {
+        Style::default().fg(Color::Blue)
+    }
+
+    fn text(spans: &[Span]) -> String {
+        spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn plain_text_unchanged() {
+        let spans = parse_inline_spans("hello world", plain_style(), code_style());
+        assert_eq!(text(&spans), "hello world");
+        assert_eq!(spans.len(), 1);
+    }
+
+    #[test]
+    fn inline_code_single() {
+        let spans = parse_inline_spans("`foo`", plain_style(), code_style());
+        assert_eq!(text(&spans), "foo");
+        assert_eq!(spans[0].style.fg, Some(Color::Blue));
+    }
+
+    #[test]
+    fn inline_code_surrounded() {
+        let spans = parse_inline_spans("call `foo` now", plain_style(), code_style());
+        assert_eq!(text(&spans), "call foo now");
+        assert_eq!(spans[0].content.as_ref(), "call ");
+        assert_eq!(spans[1].style.fg, Some(Color::Blue));
+        assert_eq!(spans[1].content.as_ref(), "foo");
+        assert_eq!(spans[2].content.as_ref(), " now");
+    }
+
+    #[test]
+    fn bold_text() {
+        let spans = parse_inline_spans("**bold**", plain_style(), code_style());
+        assert_eq!(text(&spans), "bold");
+        assert!(spans[0].style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn italic_star() {
+        let spans = parse_inline_spans("*italic*", plain_style(), code_style());
+        assert_eq!(text(&spans), "italic");
+        assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn italic_underscore() {
+        let spans = parse_inline_spans("_italic_", plain_style(), code_style());
+        assert_eq!(text(&spans), "italic");
+        assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn mixed_inline() {
+        let spans = parse_inline_spans("use `foo` and **bar**", plain_style(), code_style());
+        assert_eq!(text(&spans), "use foo and bar");
+    }
+
+    #[test]
+    fn unclosed_backtick_treated_as_plain() {
+        let spans = parse_inline_spans("`unclosed", plain_style(), code_style());
+        assert_eq!(text(&spans), "`unclosed");
+    }
+
+    #[test]
+    fn empty_string() {
+        let spans = parse_inline_spans("", plain_style(), code_style());
+        assert!(spans.is_empty());
+    }
+
+    #[test]
+    fn parse_segments_plain() {
+        let segs = parse_segments("hello world");
+        assert_eq!(segs.len(), 1);
+        assert!(matches!(segs[0], Segment::Text("hello world")));
+    }
+
+    #[test]
+    fn parse_segments_code_block() {
+        let input = "text\n```rust\nfn main() {}\n```\nafter";
+        let segs = parse_segments(input);
+        assert_eq!(segs.len(), 3);
+        assert!(matches!(segs[0], Segment::Text(_)));
+        assert!(matches!(segs[1], Segment::Code { lang: "rust", .. }));
+        assert!(matches!(segs[2], Segment::Text(_)));
+    }
+
+    #[test]
+    fn parse_segments_no_code() {
+        let segs = parse_segments("no code here");
+        assert_eq!(segs.len(), 1);
+    }
+}
+
 /// Convert a syntect `Color` (RGBA) to a ratatui `Color`.
 fn syntect_color_to_ratatui(c: syntect::highlighting::Color) -> Color {
     // syntect uses (r, g, b, a) — a=0 means "use terminal default"
@@ -200,4 +304,88 @@ fn syntect_color_to_ratatui(c: syntect::highlighting::Color) -> Color {
     } else {
         Color::Rgb(c.r, c.g, c.b)
     }
+}
+
+/// Parse a single line of text into styled `Span`s, handling inline markdown:
+/// - `` `code` `` → `code_style` (blue)
+/// - `**bold**` → BOLD modifier
+/// - `*italic*` / `_italic_` → ITALIC modifier
+pub fn parse_inline_spans(text: &str, text_style: Style, code_style: Style) -> Vec<Span<'static>> {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut i = 0;
+
+    while i < text.len() {
+        let remaining = &text[i..];
+        let b = remaining.as_bytes()[0];
+
+        if b == b'`' {
+            if let Some(close) = remaining[1..].find('`') {
+                let code = remaining[1..1 + close].to_owned();
+                spans.push(Span::styled(code, code_style));
+                i += 1 + close + 1;
+                continue;
+            }
+        }
+
+        if b == b'*' && remaining.starts_with("**") {
+            if let Some(close) = remaining[2..].find("**") {
+                let bold = remaining[2..2 + close].to_owned();
+                spans.push(Span::styled(bold, text_style.add_modifier(Modifier::BOLD)));
+                i += 2 + close + 2;
+                continue;
+            }
+        }
+
+        if b == b'*' && !remaining.starts_with("**") {
+            if let Some(close) = remaining[1..].find('*') {
+                if close > 0 {
+                    let italic = remaining[1..1 + close].to_owned();
+                    spans.push(Span::styled(
+                        italic,
+                        text_style.add_modifier(Modifier::ITALIC),
+                    ));
+                    i += 1 + close + 1;
+                    continue;
+                }
+            }
+        }
+
+        if b == b'_' {
+            if let Some(close) = remaining[1..].find('_') {
+                if close > 0 {
+                    let italic = remaining[1..1 + close].to_owned();
+                    spans.push(Span::styled(
+                        italic,
+                        text_style.add_modifier(Modifier::ITALIC),
+                    ));
+                    i += 1 + close + 1;
+                    continue;
+                }
+            }
+        }
+
+        // Advance to next special character or end
+        let start = i;
+        loop {
+            if i >= text.len() {
+                break;
+            }
+            let ch = text[i..].chars().next().unwrap();
+            let cb = ch as u32;
+            if cb < 128 && matches!(ch, '`' | '*' | '_') {
+                break;
+            }
+            i += ch.len_utf8();
+        }
+
+        if i > start {
+            spans.push(Span::styled(text[start..i].to_owned(), text_style));
+        } else {
+            let ch = text[i..].chars().next().unwrap();
+            spans.push(Span::styled(ch.to_string(), text_style));
+            i += ch.len_utf8();
+        }
+    }
+
+    spans
 }
