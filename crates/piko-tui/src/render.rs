@@ -162,6 +162,38 @@ fn message_to_list_items(role: &MessageRole, content: &str, t: &Theme) -> Vec<Li
             }
             vec![ListItem::new(Text::from(lines))]
         }
+
+        MessageRole::Thinking => {
+            let mut lines: Vec<Line> = Vec::new();
+            let mut first = true;
+            for line in content.lines() {
+                if first {
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            "▷ ",
+                            Style::default()
+                                .fg(t.subtle)
+                                .add_modifier(Modifier::DIM | Modifier::ITALIC),
+                        ),
+                        Span::styled(
+                            line.to_owned(),
+                            Style::default()
+                                .fg(t.subtle)
+                                .add_modifier(Modifier::DIM | Modifier::ITALIC),
+                        ),
+                    ]));
+                    first = false;
+                } else {
+                    lines.push(Line::from(Span::styled(
+                        format!("  {}", line),
+                        Style::default()
+                            .fg(t.subtle)
+                            .add_modifier(Modifier::DIM | Modifier::ITALIC),
+                    )));
+                }
+            }
+            vec![ListItem::new(Text::from(lines))]
+        }
     }
 }
 

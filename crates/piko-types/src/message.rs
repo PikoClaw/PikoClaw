@@ -24,6 +24,9 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
     },
+    Thinking {
+        thinking: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +40,12 @@ pub enum ToolResultContent {
 pub struct Message {
     pub role: Role,
     pub content: Vec<ContentBlock>,
+}
+
+impl ContentBlock {
+    pub fn is_thinking(&self) -> bool {
+        matches!(self, ContentBlock::Thinking { .. })
+    }
 }
 
 impl Message {
@@ -66,5 +75,39 @@ impl Message {
             })
             .collect::<Vec<_>>()
             .join("")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_thinking_block_serializes_correctly() {
+        let block = ContentBlock::Thinking {
+            thinking: "Let me reason about this.".to_string(),
+        };
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains("\"type\":\"thinking\""));
+        assert!(json.contains("\"thinking\":\"Let me reason about this.\""));
+    }
+
+    #[test]
+    fn test_thinking_block_deserializes_correctly() {
+        let json = r#"{"type":"thinking","thinking":"step one"}"#;
+        let block: ContentBlock = serde_json::from_str(json).unwrap();
+        assert!(matches!(block, ContentBlock::Thinking { thinking } if thinking == "step one"));
+    }
+
+    #[test]
+    fn test_is_thinking() {
+        let t = ContentBlock::Thinking {
+            thinking: "x".to_string(),
+        };
+        let txt = ContentBlock::Text {
+            text: "x".to_string(),
+        };
+        assert!(t.is_thinking());
+        assert!(!txt.is_thinking());
     }
 }

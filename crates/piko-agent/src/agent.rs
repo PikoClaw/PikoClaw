@@ -22,6 +22,8 @@ pub struct AgentConfig {
     pub cwd: PathBuf,
     pub system_prompt: Option<String>,
     pub bypass_permissions: bool,
+    pub extended_thinking: bool,
+    pub thinking_budget_tokens: u32,
 }
 
 impl AgentConfig {
@@ -33,6 +35,8 @@ impl AgentConfig {
             cwd,
             system_prompt: None,
             bypass_permissions: false,
+            extended_thinking: config.api.extended_thinking,
+            thinking_budget_tokens: config.api.thinking_budget_tokens,
         }
     }
 }
@@ -60,6 +64,8 @@ impl Agent {
             cwd: config.cwd.clone(),
             system_prompt: config.system_prompt.clone(),
             bypass_permissions: config.bypass_permissions,
+            extended_thinking: config.extended_thinking,
+            thinking_budget_tokens: config.thinking_budget_tokens,
         });
         tools.register(Arc::new(crate::agent_tool::AgentTool::new(
             Arc::clone(&client),

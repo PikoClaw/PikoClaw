@@ -4,6 +4,7 @@ use piko_types::tool::{ToolCall, ToolResult};
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
     TextChunk(String),
+    ThinkingChunk(String),
     ToolCallStarted(ToolCall),
     ToolCallCompleted {
         call: ToolCall,
@@ -37,6 +38,11 @@ impl OutputSink for StdoutSink {
                 print!("{}", text);
                 use std::io::Write;
                 let _ = std::io::stdout().flush();
+            }
+            AgentEvent::ThinkingChunk(text) => {
+                eprint!("{}", text);
+                use std::io::Write;
+                let _ = std::io::stderr().flush();
             }
             AgentEvent::ToolCallStarted(call) => {
                 eprintln!("\n[{}] running...", call.name);

@@ -32,6 +32,12 @@ pub struct Cli {
     #[arg(long, value_name = "FORMAT", default_value = "text")]
     pub output_format: String,
 
+    #[arg(long, default_value = "false")]
+    pub thinking: bool,
+
+    #[arg(long, value_name = "TOKENS")]
+    pub thinking_budget: Option<u32>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

@@ -10,6 +10,10 @@ pub struct PikoConfig {
     pub mcp: McpConfig,
 }
 
+fn default_thinking_budget_tokens() -> u32 {
+    10000
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
     pub model: ModelId,
@@ -20,6 +24,10 @@ pub struct ApiConfig {
     /// If None, no budget limit is enforced.
     #[serde(default)]
     pub max_budget_usd: Option<f64>,
+    #[serde(default)]
+    pub extended_thinking: bool,
+    #[serde(default = "default_thinking_budget_tokens")]
+    pub thinking_budget_tokens: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

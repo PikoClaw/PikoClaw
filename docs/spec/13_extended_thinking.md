@@ -1,6 +1,6 @@
 # Spec: Extended Thinking Support
 
-**Status**: ❌ Todo
+**Status**: ✅ Done
 **TS source**: `constants/betas.ts` (`interleaved-thinking-2025-05-14`), `components/messages/AssistantThinkingMessage.tsx`
 
 ---

@@ -130,6 +130,10 @@ fn build_agent_config(
     cli: &Cli,
     cwd: PathBuf,
 ) -> AgentConfig {
+    let extended_thinking = cli.thinking || config.api.extended_thinking;
+    let thinking_budget_tokens = cli
+        .thinking_budget
+        .unwrap_or(config.api.thinking_budget_tokens);
     AgentConfig {
         model: config.api.model.clone(),
         max_tokens: config.api.max_tokens,
@@ -137,5 +141,7 @@ fn build_agent_config(
         cwd,
         system_prompt: cli.system_prompt.clone(),
         bypass_permissions: cli.dangerously_skip_permissions,
+        extended_thinking,
+        thinking_budget_tokens,
     }
 }

@@ -48,6 +48,7 @@ pub struct MessageStartData {
 pub enum Delta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
+    ThinkingDelta { thinking: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,4 +79,39 @@ pub fn parse_sse_line(event_type: &str, data: &str) -> Result<Option<StreamEvent
     let event: StreamEvent = serde_json::from_str(data)
         .map_err(|e| ApiError::Sse(format!("failed to parse event '{}': {}", data, e)))?;
     Ok(Some(event))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_thinking_delta_deserializes() {
+        let json = r#"{"type":"thinking_delta","thinking":"Let me think..."}"#;
+        let delta: Delta = serde_json::from_str(json).unwrap();
+        assert!(
+            matches!(delta, Delta::ThinkingDelta { thinking } if thinking == "Let me think...")
+        );
+    }
+
+    #[test]
+    fn test_content_block_start_with_thinking_parses() {
+        use piko_types::message::ContentBlock;
+        let json = r#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}"#;
+        let event: StreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            event,
+            StreamEvent::ContentBlockStart {
+                index: 0,
+                content_block: ContentBlock::Thinking { .. }
+            }
+        ));
+    }
+
+    #[test]
+    fn test_text_delta_still_works() {
+        let json = r#"{"type":"text_delta","text":"hello"}"#;
+        let delta: Delta = serde_json::from_str(json).unwrap();
+        assert!(matches!(delta, Delta::TextDelta { text } if text == "hello"));
+    }
 }

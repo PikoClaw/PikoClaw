@@ -73,6 +73,8 @@ impl Tool for AgentTool {
             cwd: ctx.cwd.clone(),
             system_prompt: system_prompt.clone(),
             bypass_permissions: self.config.bypass_permissions,
+            extended_thinking: self.config.extended_thinking,
+            thinking_budget_tokens: self.config.thinking_budget_tokens,
         };
 
         let tools = Arc::new(ToolRegistry::with_defaults());

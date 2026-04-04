@@ -56,6 +56,15 @@ pub async fn run_turn(
                 .with_betas(vec!["web-search-2025-03-05".to_string()]);
         }
 
+        if config.extended_thinking {
+            let budget = config.thinking_budget_tokens;
+            let needed_max = budget.saturating_add(2048);
+            if needed_max > request.max_tokens {
+                request = request.with_max_tokens(needed_max);
+            }
+            request = request.with_thinking(budget);
+        }
+
         if let Some(ref system) = context.system_prompt {
             request = request.with_system(system.clone());
         }
@@ -137,6 +146,14 @@ pub async fn run_turn(
                             buf.push_str(&partial_json);
                         }
                     }
+                    Delta::ThinkingDelta { thinking } => {
+                        sink.emit(AgentEvent::ThinkingChunk(thinking.clone())).await;
+                        if let Some(ContentBlock::Thinking { thinking: existing }) =
+                            content_blocks.get_mut(index)
+                        {
+                            existing.push_str(&thinking);
+                        }
+                    }
                 },
                 StreamEvent::ContentBlockStop { index } => {
                     if let Some(buf) = tool_input_buffers.remove(&index) {
@@ -170,7 +187,12 @@ pub async fn run_turn(
             final_text = current_text;
         }
 
-        context.push_assistant_blocks(content_blocks.clone());
+        let history_blocks: Vec<ContentBlock> = content_blocks
+            .iter()
+            .filter(|b| !b.is_thinking())
+            .cloned()
+            .collect();
+        context.push_assistant_blocks(history_blocks);
 
         sink.emit(AgentEvent::TurnComplete {
             input_tokens,

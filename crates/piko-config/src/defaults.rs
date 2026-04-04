@@ -9,6 +9,8 @@ impl Default for ApiConfig {
             base_url: "https://api.anthropic.com".to_string(),
             api_key: None,
             max_budget_usd: None,
+            extended_thinking: false,
+            thinking_budget_tokens: 10000,
         }
     }
 }

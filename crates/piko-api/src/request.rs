@@ -3,6 +3,22 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinkingConfig {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub budget_tokens: u32,
+}
+
+impl ThinkingConfig {
+    pub fn enabled(budget_tokens: u32) -> Self {
+        Self {
+            kind: "enabled".to_string(),
+            budget_tokens,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemBlock {
     #[serde(rename = "type")]
     pub block_type: String,
@@ -41,6 +57,8 @@ pub struct MessagesRequest {
     pub temperature: Option<f32>,
     #[serde(skip)]
     pub betas: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +81,7 @@ impl MessagesRequest {
             stream: true,
             temperature: None,
             betas: None,
+            thinking: None,
         }
     }
 
@@ -112,6 +131,20 @@ impl MessagesRequest {
         self
     }
 
+    pub fn with_thinking(mut self, budget_tokens: u32) -> Self {
+        self.thinking = Some(ThinkingConfig::enabled(budget_tokens));
+        let beta = "interleaved-thinking-2025-05-14".to_string();
+        match &mut self.betas {
+            Some(betas) => {
+                if !betas.contains(&beta) {
+                    betas.push(beta);
+                }
+            }
+            None => self.betas = Some(vec![beta]),
+        }
+        self
+    }
+
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = max_tokens;
         self
@@ -140,5 +173,51 @@ impl MessagesRequest {
         }
 
         values
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use piko_types::model::ModelId;
+
+    #[test]
+    fn test_thinking_config_serializes_correctly() {
+        let cfg = ThinkingConfig::enabled(10000);
+        let json = serde_json::to_value(&cfg).unwrap();
+        assert_eq!(json["type"], "enabled");
+        assert_eq!(json["budget_tokens"], 10000);
+    }
+
+    #[test]
+    fn test_with_thinking_sets_field_and_beta() {
+        let req = MessagesRequest::new(ModelId::default(), vec![]).with_thinking(5000);
+        assert!(req.thinking.is_some());
+        assert_eq!(req.thinking.as_ref().unwrap().budget_tokens, 5000);
+        let betas = req.betas.as_ref().unwrap();
+        assert!(betas.contains(&"interleaved-thinking-2025-05-14".to_string()));
+    }
+
+    #[test]
+    fn test_with_thinking_appends_to_existing_betas() {
+        let req = MessagesRequest::new(ModelId::default(), vec![])
+            .with_betas(vec!["web-search-2025-03-05".to_string()])
+            .with_thinking(5000);
+        let betas = req.betas.as_ref().unwrap();
+        assert!(betas.contains(&"web-search-2025-03-05".to_string()));
+        assert!(betas.contains(&"interleaved-thinking-2025-05-14".to_string()));
+    }
+
+    #[test]
+    fn test_with_thinking_does_not_duplicate_beta() {
+        let req = MessagesRequest::new(ModelId::default(), vec![])
+            .with_thinking(5000)
+            .with_thinking(5000);
+        let betas = req.betas.as_ref().unwrap();
+        let count = betas
+            .iter()
+            .filter(|b| *b == "interleaved-thinking-2025-05-14")
+            .count();
+        assert_eq!(count, 1);
     }
 }

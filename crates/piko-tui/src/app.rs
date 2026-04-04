@@ -79,6 +79,7 @@ pub enum MessageRole {
     User,
     Assistant,
     System,
+    Thinking,
 }
 
 struct TuiSink {
@@ -563,6 +564,18 @@ impl App {
                 }
                 self.messages.push(ChatMessage {
                     role: MessageRole::Assistant,
+                    content: text,
+                });
+            }
+            AgentEvent::ThinkingChunk(text) => {
+                if let Some(last) = self.messages.last_mut() {
+                    if last.role == MessageRole::Thinking {
+                        last.content.push_str(&text);
+                        return;
+                    }
+                }
+                self.messages.push(ChatMessage {
+                    role: MessageRole::Thinking,
                     content: text,
                 });
             }

@@ -26,7 +26,7 @@ Each file is a dedicated spec for one feature area with implementation todos.
 | [10_config_claudemd.md](10_config_claudemd.md) | Config, CLAUDE.md & Environment Loading | ✅ Done |
 | [11_prompt_caching.md](11_prompt_caching.md) | Prompt Caching & Token Tracking | ✅ Done |
 | [12_hooks_system.md](12_hooks_system.md) | Hooks System | ❌ Todo |
-| [13_extended_thinking.md](13_extended_thinking.md) | Extended Thinking Support | ❌ Todo |
+| [13_extended_thinking.md](13_extended_thinking.md) | Extended Thinking Support | ✅ Done |
 | [14_vim_keybindings.md](14_vim_keybindings.md) | Vim Mode & Keybinding Customization | ❌ Todo |
 | [15_image_input.md](15_image_input.md) | Image & Screenshot Input | ❌ Todo |
 | [16_memory_memdir.md](16_memory_memdir.md) | Memory / Memdir System | ❌ Todo |
