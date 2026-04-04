@@ -183,11 +183,20 @@ Large text pastes (> ~5000 chars) become a reference chip:
 
 ## Input History Navigation
 
+> **Status: ✅ Implemented in v0.5.0** (`crates/piko-tui/src/history.rs`, `crates/piko-tui/src/app.rs`)
+
 When input is **empty**:
 - `↑` — replace input with previous submitted message
 - `↓` — navigate forward in history (toward current empty)
 
 Visual: input text replaces, cursor goes to end.
+
+**Implementation notes:**
+- `InputHistory` struct tracks `entries: Vec<String>` and `idx: Option<usize>`.
+- Whitespace-only submissions are silently ignored.
+- `↑` when input has content but navigation is active continues navigating (allows full round-trips).
+- Typing while browsing exits navigation mode, keeping the recalled text editable.
+- `↑`/`↓` fall back to chat-pane scroll when history is empty or not navigating.
 
 ---
 

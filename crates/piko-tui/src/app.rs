@@ -1,4 +1,5 @@
 use crate::events::{AppEvent, PermissionPrompt, QuestionPrompt};
+use crate::history::InputHistory;
 use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
@@ -63,6 +64,8 @@ pub struct App {
     pub cwd: String,
     /// Set when a 429 is received; cleared once the instant passes.
     pub rate_limit_until: Option<std::time::Instant>,
+    /// Input history for ↑/↓ navigation (Design Spec 03).
+    pub history: InputHistory,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +149,7 @@ impl App {
             model_name,
             cwd,
             rate_limit_until: None,
+            history: InputHistory::new(),
         }
     }
 
@@ -277,6 +281,7 @@ impl App {
             (KeyCode::Enter, _) if self.state == AppState::Running => {
                 let input = std::mem::take(&mut self.input);
                 self.cursor_pos = 0;
+                self.history.reset();
                 if !input.trim().is_empty() {
                     self.submit_input(input).await?;
                 }
@@ -297,13 +302,44 @@ impl App {
                     self.cursor_pos += 1;
                 }
             }
+            // ↑ — navigate to previous history entry when input is empty or already browsing.
+            // Falls back to chat-pane scrolling when there is no history to recall.
             (KeyCode::Up, _) => {
-                self.scroll = self.scroll.saturating_sub(1);
+                if self.input.is_empty() || self.history.is_navigating() {
+                    if let Some(recalled) = self.history.backward() {
+                        self.input = recalled.to_string();
+                        self.cursor_pos = self.input.len();
+                    } else {
+                        self.scroll = self.scroll.saturating_sub(1);
+                    }
+                } else {
+                    self.scroll = self.scroll.saturating_sub(1);
+                }
             }
+            // ↓ — navigate forward in history while browsing; scroll chat otherwise.
             (KeyCode::Down, _) => {
-                self.scroll = self.scroll.saturating_add(1);
+                if self.history.is_navigating() {
+                    match self.history.forward() {
+                        Some(recalled) => {
+                            self.input = recalled.to_string();
+                            self.cursor_pos = self.input.len();
+                        }
+                        None => {
+                            // Past the newest entry → return to empty live input.
+                            self.input.clear();
+                            self.cursor_pos = 0;
+                        }
+                    }
+                } else {
+                    self.scroll = self.scroll.saturating_add(1);
+                }
             }
             (KeyCode::Char(c), _) => {
+                // Typing while browsing history exits navigation mode but keeps the
+                // recalled text so the user can edit it.
+                if self.history.is_navigating() {
+                    self.history.reset();
+                }
                 self.input.insert(self.cursor_pos, c);
                 self.cursor_pos += 1;
             }
@@ -313,6 +349,8 @@ impl App {
     }
 
     async fn submit_input(&mut self, input: String) -> Result<()> {
+        // Record every non-empty submission in input history before dispatching.
+        self.history.push(input.clone());
         self.show_header = false;
         match self.dispatcher.dispatch(&input) {
             DispatchResult::BuiltIn { name, args } => match name.as_str() {
