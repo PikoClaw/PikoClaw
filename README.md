@@ -10,6 +10,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg)](#install)
 [![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
 [![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
+[![MOAT](https://img.shields.io/badge/MOAT-⚡%20Tiny%20%7C%20Fast%20%7C%20🌍%20Deploy%20Anywhere%20%7C%20🤖%20Multi--LLM-red)](#)
 ![GitHub Downloads](https://img.shields.io/github/downloads/pikoclaw/pikoclaw/total)
 ![GitHub release](https://img.shields.io/github/v/release/pikoclaw/pikoclaw)
 
