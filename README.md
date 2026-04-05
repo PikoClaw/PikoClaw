@@ -7,6 +7,7 @@
 [![Safe](https://img.shields.io/badge/Safe-No%20Telemetry%20%7C%20Open%20Source-success)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml/badge.svg)](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml)
+[![CodeQL](https://github.com/PikoClaw/PikoClaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/PikoClaw/PikoClaw/actions/workflows/codeql.yml)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg)](#install)
 [![Ultra Lightweight](https://img.shields.io/badge/Ultra-Lightweight-brightgreen.svg)](#)
