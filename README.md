@@ -51,6 +51,18 @@ brew tap PikoClaw/pikoclaw
 brew install pikoclaw
 ```
 
+**Upgrade PikoClaw**
+
+```bash
+brew upgrade pikoclaw
+
+# If not working, then follow:
+brew uninstall pikoclaw
+brew untap pikoclaw/pikoclaw
+brew tap pikoclaw/pikoclaw
+brew install pikoclaw
+```
+
 ### Linux
 
 ```bash
