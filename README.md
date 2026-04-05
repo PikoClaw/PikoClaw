@@ -4,12 +4,13 @@
 
 <img src="docs/images/PikoClaw.png" height="200" />
 
+[![Safe](https://img.shields.io/badge/Safe-No%20Telemetry%20%7C%20Open%20Source-success)](#)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml/badge.svg)](https://github.com/PikoClaw/pikoclaw/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg)](#install)
-[![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
-[![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
+[![Ultra Lightweight](https://img.shields.io/badge/Ultra-Lightweight-brightgreen.svg)](#)
+[![Speed](https://img.shields.io/badge/Speed-Blazing%20Fast-red.svg)](#)
 [![MOAT](https://img.shields.io/badge/MOAT-⚡%20Tiny%20%7C%20Fast%20%7C%20🌍%20Deploy%20Anywhere%20%7C%20🤖%20Multi--LLM-red)](#)
 ![GitHub Downloads](https://img.shields.io/github/downloads/pikoclaw/pikoclaw/total)
 ![GitHub release](https://img.shields.io/github/v/release/pikoclaw/pikoclaw)
