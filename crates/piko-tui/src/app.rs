@@ -120,6 +120,8 @@ pub struct ToolCallInfo {
     pub id: String,
     pub display_name: String,
     pub args_display: String,
+    pub started_at: std::time::Instant,
+    pub completed_at: Option<std::time::Instant>,
     pub result: Option<ToolResultSummary>,
 }
 
@@ -859,6 +861,8 @@ impl App {
                         id: call.id.clone(),
                         display_name,
                         args_display,
+                        started_at: std::time::Instant::now(),
+                        completed_at: None,
                         result: None,
                     }),
                 });
@@ -872,6 +876,7 @@ impl App {
                     .find(|m| m.tool_info.as_ref().is_some_and(|t| t.id == call.id))
                 {
                     if let Some(info) = msg.tool_info.as_mut() {
+                        info.completed_at = Some(std::time::Instant::now());
                         info.result = Some(ToolResultSummary {
                             is_error: result.is_error,
                             text: summary,
@@ -969,83 +974,55 @@ pub fn tool_display_name(name: &str) -> String {
 /// Matches Claude Code's truncation and format rules.
 pub fn tool_args_display(name: &str, input: &serde_json::Value, cwd_raw: &str) -> String {
     match name {
-        "bash" => {
-            if let Some(cmd) = input.get("command").and_then(|v| v.as_str()) {
-                let lines: Vec<&str> = cmd.lines().collect();
-                let truncated = if lines.len() > 2 {
-                    format!("{}\n{}…", lines[0], lines[1])
-                } else {
-                    cmd.to_string()
-                };
-                if truncated.len() > 160 {
-                    format!("{}…", &truncated[..160])
-                } else {
-                    truncated
-                }
-            } else {
-                String::new()
-            }
-        }
-        "file_read" | "file_write" | "file_edit" => input
+        "Bash" | "bash" => input
+            .get("command")
+            .and_then(|v| v.as_str())
+            .map(preview_command)
+            .unwrap_or_default(),
+        "Read" | "Write" | "Edit" | "file_read" | "file_write" | "file_edit" => input
             .get("file_path")
             .or_else(|| input.get("path"))
             .and_then(|v| v.as_str())
             .map(|p| shorten_path(p, cwd_raw))
+            .map(|p| truncate_preview(&p, 60))
             .unwrap_or_default(),
-        "glob" => {
+        "Glob" | "glob" => {
             let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
             match input.get("path").and_then(|v| v.as_str()) {
-                Some(p) => format!(
-                    "pattern: \"{}\", path: \"{}\"",
-                    pattern,
-                    shorten_path(p, cwd_raw)
-                ),
-                None => format!("pattern: \"{}\"", pattern),
+                Some(p) => {
+                    truncate_preview(&format!("{} in {}", pattern, shorten_path(p, cwd_raw)), 60)
+                }
+                None => truncate_preview(pattern, 60),
             }
         }
-        "grep" => {
+        "Grep" | "grep" => {
             let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
             match input.get("path").and_then(|v| v.as_str()) {
-                Some(p) => format!(
-                    "pattern: \"{}\", path: \"{}\"",
-                    pattern,
-                    shorten_path(p, cwd_raw)
-                ),
-                None => format!("pattern: \"{}\"", pattern),
+                Some(p) => {
+                    truncate_preview(&format!("{} in {}", pattern, shorten_path(p, cwd_raw)), 60)
+                }
+                None => truncate_preview(pattern, 60),
             }
         }
-        "web_fetch" => input
+        "WebFetch" | "web_fetch" => input
             .get("url")
             .and_then(|v| v.as_str())
-            .map(|u| {
-                if u.len() > 60 {
-                    format!("{}…", &u[..60])
-                } else {
-                    u.to_string()
-                }
-            })
+            .map(|u| truncate_preview(u, 60))
             .unwrap_or_default(),
-        "web_search" => input
+        "WebSearch" | "web_search" => input
             .get("query")
             .and_then(|v| v.as_str())
-            .map(|q| {
-                if q.len() > 80 {
-                    format!("{}…", &q[..80])
-                } else {
-                    q.to_string()
-                }
-            })
+            .map(|q| truncate_preview(q, 60))
             .unwrap_or_default(),
         "AskUserQuestion" | "ask_user_question" => input
             .get("question")
             .and_then(|v| v.as_str())
-            .map(|q| {
-                if q.len() > 80 {
-                    format!("{}…", &q[..80])
-                } else {
-                    q.to_string()
-                }
-            })
+            .map(|q| truncate_preview(q, 60))
+            .unwrap_or_default(),
+        "TodoWrite" | "todo_write" => input
+            .get("todos")
+            .and_then(|v| v.as_array())
+            .map(|todos| format!("{} items", todos.len()))
             .unwrap_or_default(),
         _ => String::new(),
     }
@@ -1065,8 +1042,6 @@ pub fn tool_result_summary(
             .and_then(|s| s.split("</tool_use_error>").next())
             .map(|s| s.trim())
             .unwrap_or(content);
-        let msg = msg.lines().next().unwrap_or(msg);
-        let msg = if msg.len() > 120 { &msg[..120] } else { msg };
         if msg.starts_with("Error:") || msg.starts_with("Cancelled:") {
             msg.to_string()
         } else {
@@ -1187,6 +1162,28 @@ fn shorten_path(path: &str, cwd_raw: &str) -> String {
     } else {
         path.to_string()
     }
+}
+
+fn preview_command(cmd: &str) -> String {
+    let first_line = cmd.lines().next().unwrap_or("").trim();
+    let has_more = cmd.lines().nth(1).is_some();
+    if has_more {
+        truncate_preview(&format!("{first_line}…"), 60)
+    } else {
+        truncate_preview(first_line, 60)
+    }
+}
+
+fn truncate_preview(s: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if i >= max_chars {
+            out.push('…');
+            return out;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn parse_chip_id(chip: &str) -> Option<u32> {
@@ -1440,5 +1437,26 @@ mod tests {
             }
         }
         assert_eq!(result, "see [Image #1] here");
+    }
+
+    #[test]
+    fn tool_args_display_bash_uses_first_line_preview() {
+        let input = serde_json::json!({
+            "command": "git diff -- src/main.rs\ncargo test"
+        });
+        assert_eq!(
+            tool_args_display("Bash", &input, "/tmp"),
+            "git diff -- src/main.rs…"
+        );
+    }
+
+    #[test]
+    fn tool_args_display_webfetch_truncates_to_spec_preview_width() {
+        let input = serde_json::json!({
+            "url": "https://example.com/abcdefghijklmnopqrstuvwxyz/abcdefghijklmnopqrstuvwxyz/extra"
+        });
+        let preview = tool_args_display("WebFetch", &input, "/tmp");
+        assert!(preview.ends_with('…'));
+        assert!(preview.chars().count() <= 61);
     }
 }

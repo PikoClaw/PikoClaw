@@ -296,58 +296,91 @@ fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line
             };
             let mut lines: Vec<Line> = Vec::new();
 
-            // Status icon color: dim=pending, green=success, red=error
-            let (icon_color, icon_dim) = match &info.result {
-                None => (t.subtle, true),
-                Some(r) if r.is_error => (t.error, false),
-                Some(_) => (t.success, false),
-            };
-            let icon_style = if icon_dim {
-                Style::default().fg(icon_color).add_modifier(Modifier::DIM)
+            let elapsed = info
+                .completed_at
+                .unwrap_or_else(std::time::Instant::now)
+                .saturating_duration_since(info.started_at);
+            let elapsed_text = format_elapsed(elapsed);
+            let is_running = info.result.is_none();
+            let icon = if is_running {
+                spinner_frame()
+            } else if info.result.as_ref().is_some_and(|r| r.is_error) {
+                "✗".to_string()
             } else {
-                Style::default().fg(icon_color)
+                "✓".to_string()
             };
+            let icon_style = if is_running {
+                Style::default().fg(t.permission)
+            } else if info.result.as_ref().is_some_and(|r| r.is_error) {
+                Style::default().fg(t.error)
+            } else {
+                Style::default().fg(t.success)
+            };
+            let name_style = if is_running {
+                Style::default()
+                    .fg(t.permission)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.inactive).add_modifier(Modifier::DIM)
+            };
+            let preview_style = Style::default().fg(t.inactive).add_modifier(Modifier::DIM);
+            let indent = "  ";
+            let meta_prefix = if info.args_display.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", info.args_display.replace('\n', " "))
+            };
+            let left_plain = format!("{} {}{}", icon, info.display_name, meta_prefix);
+            let time_width = elapsed_text.chars().count();
+            let left_width = left_plain.chars().count();
 
-            // Header: ⏺ ToolName(args)
-            let mut header_spans = vec![
-                Span::styled(format!("{} ", BLACK_CIRCLE), icon_style),
-                Span::styled(
-                    info.display_name.clone(),
-                    Style::default().fg(t.text).add_modifier(Modifier::BOLD),
-                ),
-            ];
-            if !info.args_display.is_empty() {
-                // Show multi-line args (e.g. bash commands) on separate indented lines
-                let arg_lines: Vec<&str> = info.args_display.lines().collect();
-                header_spans.push(Span::styled("(", Style::default().fg(t.subtle)));
-                header_spans.push(Span::styled(
-                    arg_lines[0].to_string(),
-                    Style::default().fg(t.subtle),
-                ));
-                if arg_lines.len() == 1 {
-                    header_spans.push(Span::styled(")", Style::default().fg(t.subtle)));
-                    lines.extend(word_wrap(header_spans, area_width));
-                } else {
-                    lines.extend(word_wrap(header_spans, area_width));
-                    for extra in &arg_lines[1..] {
-                        let cont =
-                            Span::styled(format!("   {})", extra), Style::default().fg(t.subtle));
-                        lines.push(Line::from(cont));
-                    }
+            if area_width > left_width + time_width + 1 {
+                let padding = area_width - left_width - time_width;
+                let mut spans = vec![
+                    Span::styled(format!("{} ", icon), icon_style),
+                    Span::styled(info.display_name.clone(), name_style),
+                ];
+                if !info.args_display.is_empty() {
+                    spans.push(Span::styled(" · ", preview_style));
+                    spans.push(Span::styled(
+                        info.args_display.replace('\n', " "),
+                        preview_style,
+                    ));
                 }
+                spans.push(Span::raw(" ".repeat(padding)));
+                spans.push(Span::styled(elapsed_text.clone(), preview_style));
+                lines.push(Line::from(spans));
             } else {
-                lines.extend(word_wrap(header_spans, area_width));
+                let mut header = vec![
+                    Span::styled(format!("{} ", icon), icon_style),
+                    Span::styled(info.display_name.clone(), name_style),
+                ];
+                if !info.args_display.is_empty() {
+                    header.push(Span::styled(" · ", preview_style));
+                    header.push(Span::styled(
+                        info.args_display.replace('\n', " "),
+                        preview_style,
+                    ));
+                }
+                lines.extend(word_wrap(header, area_width));
+                lines.push(Line::from(Span::styled(
+                    format!("{indent}{elapsed_text}"),
+                    preview_style,
+                )));
             }
 
-            // Result line (dim, indented)
-            if let Some(result) = &info.result {
-                let result_color = if result.is_error { t.error } else { t.subtle };
-                lines.push(Line::from(Span::styled(
-                    format!("  {}", result.text),
-                    Style::default()
-                        .fg(result_color)
-                        .add_modifier(Modifier::DIM),
-                )));
+            if let Some(result) = info
+                .result
+                .as_ref()
+                .filter(|r| r.is_error && !r.text.is_empty())
+            {
+                let result_color = if result.is_error { t.error } else { t.inactive };
+                lines.extend(result.text.lines().map(|line| {
+                    Line::from(Span::styled(
+                        format!("{indent}{line}"),
+                        Style::default().fg(result_color),
+                    ))
+                }));
             }
             lines.push(Line::from(""));
             lines
@@ -722,6 +755,30 @@ fn fmt_tokens(n: u32) -> String {
         format!("{:.1}k", n as f32 / 1_000.0)
     } else {
         n.to_string()
+    }
+}
+
+fn spinner_frame() -> String {
+    let frame = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        / 100) as usize
+        % 10;
+    const TOOL_SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    TOOL_SPINNER[frame].to_string()
+}
+
+fn format_elapsed(elapsed: std::time::Duration) -> String {
+    let secs = elapsed.as_secs();
+    if secs == 0 {
+        format!("0.{:01}s", elapsed.subsec_millis() / 100)
+    } else if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m {}s", secs / 60, secs % 60)
+    } else {
+        format!("{}h {:02}m", secs / 3600, (secs % 3600) / 60)
     }
 }
 
