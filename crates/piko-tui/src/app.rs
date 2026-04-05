@@ -4,7 +4,10 @@ use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
 use async_trait::async_trait;
-use crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event};
+use crossterm::event::{
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, MouseEventKind,
+};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -50,6 +53,9 @@ pub struct App {
     pub input: String,
     pub cursor_pos: usize,
     pub scroll: usize,
+    pub follow_bottom: bool,
+    pub last_total_lines: std::cell::Cell<usize>,
+    pub last_frame_height: std::cell::Cell<usize>,
     pub agent: Arc<Mutex<Agent>>,
     pub dispatcher: SkillDispatcher,
     pub event_tx: mpsc::UnboundedSender<AppEvent>,
@@ -86,12 +92,38 @@ pub struct App {
     pub plan_mode: Arc<AtomicBool>,
     pub plan_mode_exit_rx: mpsc::UnboundedReceiver<PlanModeExitRequest>,
     pub pending_plan_mode_exit: Option<oneshot::Sender<bool>>,
+    /// Raw (non-tilde) CWD used for shortening file paths in tool displays.
+    pub cwd_raw: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,
+    /// Populated for MessageRole::ToolCall messages.
+    pub tool_info: Option<ToolCallInfo>,
+}
+
+impl ChatMessage {
+    pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
+        Self { role, content: content.into(), tool_info: None }
+    }
+}
+
+/// Tracks display state for a single tool invocation.
+#[derive(Debug, Clone)]
+pub struct ToolCallInfo {
+    pub id: String,
+    pub display_name: String,
+    pub args_display: String,
+    pub result: Option<ToolResultSummary>,
+}
+
+/// The resolved outcome of a tool call.
+#[derive(Debug, Clone)]
+pub struct ToolResultSummary {
+    pub is_error: bool,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +132,7 @@ pub enum MessageRole {
     Assistant,
     System,
     Thinking,
+    ToolCall,
 }
 
 struct TuiSink {
@@ -125,13 +158,13 @@ impl App {
         let (question_tx, question_rx) = mpsc::unbounded_channel::<AskQuestion>();
 
         let model_name = agent.config.model.as_str().to_string();
+        let cwd_raw = agent.config.cwd.to_string_lossy().into_owned();
         let cwd = {
-            let raw = agent.config.cwd.to_string_lossy();
             let home = std::env::var("HOME").unwrap_or_default();
-            if !home.is_empty() && raw.starts_with(&home) {
-                format!("~{}", &raw[home.len()..])
+            if !home.is_empty() && cwd_raw.starts_with(&home) {
+                format!("~{}", &cwd_raw[home.len()..])
             } else {
-                raw.into_owned()
+                cwd_raw.clone()
             }
         };
 
@@ -162,6 +195,9 @@ impl App {
             input: String::new(),
             cursor_pos: 0,
             scroll: 0,
+            follow_bottom: true,
+            last_total_lines: std::cell::Cell::new(0),
+            last_frame_height: std::cell::Cell::new(0),
             agent: Arc::new(Mutex::new(agent)),
             dispatcher,
             event_tx,
@@ -188,6 +224,7 @@ impl App {
             plan_mode,
             plan_mode_exit_rx,
             pending_plan_mode_exit: None,
+            cwd_raw,
         }
     }
 
@@ -196,12 +233,14 @@ impl App {
         let mut stdout = stdout();
         stdout.execute(EnterAlternateScreen)?;
         stdout.execute(EnableBracketedPaste)?;
+        stdout.execute(EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
         let result = self.event_loop(&mut terminal).await;
 
         disable_raw_mode()?;
+        terminal.backend_mut().execute(DisableMouseCapture)?;
         terminal.backend_mut().execute(DisableBracketedPaste)?;
         terminal.backend_mut().execute(LeaveAlternateScreen)?;
         terminal.show_cursor()?;
@@ -226,6 +265,11 @@ impl App {
                     Event::Paste(text) => {
                         self.handle_paste(text);
                     }
+                    Event::Mouse(mouse) => match mouse.kind {
+                        MouseEventKind::ScrollUp => self.scroll_up(3),
+                        MouseEventKind::ScrollDown => self.scroll_down(3),
+                        _ => {}
+                    },
                     _ => {}
                 }
             }
@@ -293,7 +337,8 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: msg.to_string(),
-                });
+                tool_info: None,
+        });
                 self.state = AppState::WaitingForAgent;
             }
             return Ok(());
@@ -311,6 +356,7 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: format!("Q: {} → {}", prompt.question, answer),
+                    tool_info: None,
                 });
                 let _ = prompt.reply.send(answer);
                 self.state = AppState::WaitingForAgent;
@@ -332,6 +378,7 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: format!("[permission] {} → {}", tool, decided),
+                    tool_info: None,
                 });
                 self.state = AppState::WaitingForAgent;
             }
@@ -385,23 +432,26 @@ impl App {
                     self.cursor_pos += 1;
                 }
             }
-            // ↑ — navigate history when input is empty/browsing; else scroll UP (see older).
-            // scroll=0 means bottom; scroll=N means N lines above bottom.
+            // ↑ — scroll viewport when agent is running; else navigate input history.
             (KeyCode::Up, _) => {
-                if self.input.is_empty() || self.history.is_navigating() {
+                if self.state == AppState::WaitingForAgent {
+                    self.scroll_up(1);
+                } else if self.input.is_empty() || self.history.is_navigating() {
                     if let Some(recalled) = self.history.backward() {
                         self.input = recalled.to_string();
                         self.cursor_pos = self.input.len();
                     } else {
-                        self.scroll = self.scroll.saturating_add(1);
+                        self.scroll_up(1);
                     }
                 } else {
-                    self.scroll = self.scroll.saturating_add(1);
+                    self.scroll_up(1);
                 }
             }
-            // ↓ — navigate history forward while browsing; else scroll DOWN (see newer).
+            // ↓ — scroll viewport when agent is running; else navigate history.
             (KeyCode::Down, _) => {
-                if self.history.is_navigating() {
+                if self.state == AppState::WaitingForAgent {
+                    self.scroll_down(1);
+                } else if self.history.is_navigating() {
                     match self.history.forward() {
                         Some(recalled) => {
                             self.input = recalled.to_string();
@@ -413,8 +463,16 @@ impl App {
                         }
                     }
                 } else {
-                    self.scroll = self.scroll.saturating_sub(1);
+                    self.scroll_down(1);
                 }
+            }
+            (KeyCode::PageUp, _) => {
+                let page = self.last_frame_height.get().saturating_sub(2).max(1);
+                self.scroll_up(page);
+            }
+            (KeyCode::PageDown, _) => {
+                let page = self.last_frame_height.get().saturating_sub(2).max(1);
+                self.scroll_down(page);
             }
             (KeyCode::Char(c), _) => {
                 // Typing while browsing history exits navigation mode but keeps the
@@ -428,6 +486,30 @@ impl App {
             _ => {}
         }
         Ok(())
+    }
+
+    fn scroll_up(&mut self, lines: usize) {
+        if self.follow_bottom {
+            let total = self.last_total_lines.get();
+            let height = self.last_frame_height.get();
+            self.scroll = total.saturating_sub(height);
+            self.follow_bottom = false;
+        }
+        self.scroll = self.scroll.saturating_sub(lines);
+    }
+
+    fn scroll_down(&mut self, lines: usize) {
+        if self.follow_bottom {
+            return;
+        }
+        let total = self.last_total_lines.get();
+        let height = self.last_frame_height.get();
+        let max_start = total.saturating_sub(height);
+        self.scroll = (self.scroll + lines).min(max_start);
+        if self.scroll >= max_start {
+            self.follow_bottom = true;
+            self.scroll = 0;
+        }
     }
 
     async fn submit_input(&mut self, input: String) -> Result<()> {
@@ -449,7 +531,8 @@ impl App {
                         content:
                             "Commands: /help, /clear, /model <name>, /theme [name], /compact, /cost, /plan, /exit"
                                 .to_string(),
-                    });
+                    tool_info: None,
+        });
                 }
                 "theme" => {
                     if let Some(name) = args.first() {
@@ -459,6 +542,7 @@ impl App {
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Theme set to «{}»", t.label),
+                            tool_info: None,
                         });
                     } else {
                         // No arg → cycle to next theme
@@ -475,6 +559,7 @@ impl App {
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             ),
+                            tool_info: None,
                         });
                     }
                 }
@@ -492,7 +577,8 @@ impl App {
                     self.messages.push(ChatMessage {
                         role: MessageRole::System,
                         content: msg.to_string(),
-                    });
+                    tool_info: None,
+        });
                 }
                 "cost" => {
                     self.show_cost_summary();
@@ -505,12 +591,14 @@ impl App {
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Model set to {}", model.as_str()),
+                            tool_info: None,
                         });
                     } else {
                         let model = self.agent.blocking_lock().config.model.as_str().to_string();
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Current model: {}", model),
+                            tool_info: None,
                         });
                     }
                 }
@@ -584,6 +672,7 @@ impl App {
         self.messages.push(ChatMessage {
             role: MessageRole::System,
             content,
+                    tool_info: None,
         });
     }
 
@@ -626,6 +715,7 @@ impl App {
         self.messages.push(ChatMessage {
             role: MessageRole::System,
             content: format!("[compact] conversation summarized:\n{}", summary),
+                tool_info: None,
         });
     }
 
@@ -633,8 +723,10 @@ impl App {
         self.messages.push(ChatMessage {
             role: MessageRole::User,
             content: display_content,
+        tool_info: None,
         });
-        self.scroll = 0; // auto-follow new response
+        self.scroll = 0;
+        self.follow_bottom = true;
         self.state = AppState::WaitingForAgent;
 
         let tx = self.event_tx.clone();
@@ -737,7 +829,8 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::Assistant,
                     content: text,
-                });
+                tool_info: None,
+        });
             }
             AgentEvent::ThinkingChunk(text) => {
                 if let Some(last) = self.messages.last_mut() {
@@ -749,20 +842,34 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::Thinking,
                     content: text,
+                    tool_info: None,
                 });
             }
             AgentEvent::ToolCallStarted(call) => {
+                let display_name = tool_display_name(&call.name);
+                let args_display = tool_args_display(&call.name, &call.input, &self.cwd_raw);
                 self.messages.push(ChatMessage {
-                    role: MessageRole::System,
-                    content: format!("[{}] running...", call.name),
+                    role: MessageRole::ToolCall,
+                    content: String::new(),
+                    tool_info: Some(ToolCallInfo {
+                        id: call.id.clone(),
+                        display_name,
+                        args_display,
+                        result: None,
+                    }),
                 });
             }
             AgentEvent::ToolCallCompleted { call, result } => {
-                if result.is_error {
-                    self.messages.push(ChatMessage {
-                        role: MessageRole::System,
-                        content: format!("[{}] error: {}", call.name, result.content),
-                    });
+                let summary = tool_result_summary(&call.name, &call.input, &result);
+                if let Some(msg) = self.messages.iter_mut().rev().find(|m| {
+                    m.tool_info.as_ref().map_or(false, |t| t.id == call.id)
+                }) {
+                    if let Some(info) = msg.tool_info.as_mut() {
+                        info.result = Some(ToolResultSummary {
+                            is_error: result.is_error,
+                            text: summary,
+                        });
+                    }
                 }
             }
             AgentEvent::TurnComplete {
@@ -794,6 +901,7 @@ impl App {
                                 "Budget limit reached ({}). Session stopped.",
                                 piko_api::format_cost(max)
                             ),
+                                    tool_info: None,
                         });
                         self.state = AppState::Exiting;
                     }
@@ -804,6 +912,7 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: format!("Error: {}", msg),
+                tool_info: None,
                 });
             }
             AgentEvent::RateLimit { retry_after } => {
@@ -817,6 +926,7 @@ impl App {
                         reset_in / 60,
                         reset_in % 60
                     ),
+                    tool_info: None,
                 });
             }
         }
@@ -825,6 +935,187 @@ impl App {
 
 fn is_paste_chip(s: &str) -> bool {
     (s.starts_with("[Pasted text #") || s.starts_with("[...Truncated text #")) && s.ends_with(']')
+}
+
+// ── Tool call display helpers ─────────────────────────────────────────────────
+
+/// Returns the user-facing tool name shown in bold (matches Claude Code convention).
+pub fn tool_display_name(name: &str) -> String {
+    match name {
+        "bash" => "Bash",
+        "file_read" => "Read",
+        "file_write" => "Write",
+        "file_edit" => "Edit",
+        "glob" => "Search",
+        "grep" => "Search",
+        "web_fetch" => "WebFetch",
+        "web_search" => "WebSearch",
+        "AskUserQuestion" | "ask_user_question" => "Ask",
+        "ExitPlanMode" | "exit_plan_mode" => "ExitPlanMode",
+        "EnterPlanMode" | "enter_plan_mode" => "EnterPlanMode",
+        other => return other.to_string(),
+    }
+    .to_string()
+}
+
+/// Returns the args string shown in parentheses next to the tool name.
+/// Matches Claude Code's truncation and format rules.
+pub fn tool_args_display(name: &str, input: &serde_json::Value, cwd_raw: &str) -> String {
+    match name {
+        "bash" => {
+            if let Some(cmd) = input.get("command").and_then(|v| v.as_str()) {
+                let lines: Vec<&str> = cmd.lines().collect();
+                let truncated = if lines.len() > 2 {
+                    format!("{}\n{}…", lines[0], lines[1])
+                } else {
+                    cmd.to_string()
+                };
+                if truncated.len() > 160 {
+                    format!("{}…", &truncated[..160])
+                } else {
+                    truncated
+                }
+            } else {
+                String::new()
+            }
+        }
+        "file_read" | "file_write" | "file_edit" => {
+            input.get("file_path")
+                .or_else(|| input.get("path"))
+                .and_then(|v| v.as_str())
+                .map(|p| shorten_path(p, cwd_raw))
+                .unwrap_or_default()
+        }
+        "glob" => {
+            let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
+            match input.get("path").and_then(|v| v.as_str()) {
+                Some(p) => format!("pattern: \"{}\", path: \"{}\"", pattern, shorten_path(p, cwd_raw)),
+                None => format!("pattern: \"{}\"", pattern),
+            }
+        }
+        "grep" => {
+            let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
+            match input.get("path").and_then(|v| v.as_str()) {
+                Some(p) => format!("pattern: \"{}\", path: \"{}\"", pattern, shorten_path(p, cwd_raw)),
+                None => format!("pattern: \"{}\"", pattern),
+            }
+        }
+        "web_fetch" => {
+            input.get("url").and_then(|v| v.as_str())
+                .map(|u| if u.len() > 60 { format!("{}…", &u[..60]) } else { u.to_string() })
+                .unwrap_or_default()
+        }
+        "web_search" => {
+            input.get("query").and_then(|v| v.as_str())
+                .map(|q| if q.len() > 80 { format!("{}…", &q[..80]) } else { q.to_string() })
+                .unwrap_or_default()
+        }
+        "AskUserQuestion" | "ask_user_question" => {
+            input.get("question").and_then(|v| v.as_str())
+                .map(|q| if q.len() > 80 { format!("{}…", &q[..80]) } else { q.to_string() })
+                .unwrap_or_default()
+        }
+        _ => String::new(),
+    }
+}
+
+/// Returns a one-line result summary (e.g. "Read 42 lines", "Wrote 10 lines to src/main.rs").
+pub fn tool_result_summary(name: &str, input: &serde_json::Value, result: &piko_types::tool::ToolResult) -> String {
+    if result.is_error {
+        let content = result.content.trim();
+        let msg = content
+            .split("<tool_use_error>").nth(1)
+            .and_then(|s| s.split("</tool_use_error>").next())
+            .map(|s| s.trim())
+            .unwrap_or(content);
+        let msg = msg.lines().next().unwrap_or(msg);
+        let msg = if msg.len() > 120 { &msg[..120] } else { msg };
+        if msg.starts_with("Error:") || msg.starts_with("Cancelled:") {
+            msg.to_string()
+        } else {
+            format!("Error: {}", msg)
+        }
+    } else {
+        match name {
+            "file_read" => {
+                let lines = result.content.lines().count();
+                format!("Read {} lines", lines)
+            }
+            "file_write" => {
+                let path = input.get("file_path").or_else(|| input.get("path"))
+                    .and_then(|v| v.as_str()).unwrap_or("");
+                let lines = result.content.lines().count();
+                let home = std::env::var("HOME").unwrap_or_default();
+                let display = if !home.is_empty() && path.starts_with(&home) {
+                    format!("~{}", &path[home.len()..])
+                } else { path.to_string() };
+                if display.is_empty() {
+                    format!("Wrote {} lines", lines)
+                } else {
+                    format!("Wrote {} lines to {}", lines, display)
+                }
+            }
+            "file_edit" => {
+                let path = input.get("file_path").or_else(|| input.get("path"))
+                    .and_then(|v| v.as_str()).unwrap_or("");
+                if path.is_empty() {
+                    "Updated file".to_string()
+                } else {
+                    let home = std::env::var("HOME").unwrap_or_default();
+                    let display = if !home.is_empty() && path.starts_with(&home) {
+                        format!("~{}", &path[home.len()..])
+                    } else { path.to_string() };
+                    format!("Updated {}", display)
+                }
+            }
+            "glob" => {
+                let count = result.content.lines().filter(|l| !l.trim().is_empty()).count();
+                format!("Found {} files", count)
+            }
+            "grep" => {
+                let count = result.content.lines().filter(|l| !l.trim().is_empty()).count();
+                format!("Found {} lines", count)
+            }
+            "bash" => {
+                let content = result.content.trim();
+                if content.is_empty() {
+                    "(No output)".to_string()
+                } else {
+                    let first = content.lines().next().unwrap_or("");
+                    if first.len() > 80 { format!("{}…", &first[..80]) } else { first.to_string() }
+                }
+            }
+            "web_fetch" => {
+                let kb = result.content.len() / 1024;
+                if kb > 0 { format!("Fetched {}KB", kb) } else { format!("Fetched {}B", result.content.len()) }
+            }
+            "web_search" => {
+                let count = result.content.lines().filter(|l| !l.trim().is_empty()).count();
+                format!("Found {} results", count)
+            }
+            _ => String::new(),
+        }
+    }
+}
+
+fn shorten_path(path: &str, cwd_raw: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    // First try to make relative to cwd
+    if !cwd_raw.is_empty() {
+        let cwd_slash = if cwd_raw.ends_with('/') { cwd_raw.to_string() } else { format!("{}/", cwd_raw) };
+        if path.starts_with(&cwd_slash) {
+            return path[cwd_slash.len()..].to_string();
+        }
+        if path == cwd_raw {
+            return ".".to_string();
+        }
+    }
+    // Fall back to ~ substitution
+    if !home.is_empty() && path.starts_with(&home) {
+        format!("~{}", &path[home.len()..])
+    } else {
+        path.to_string()
+    }
 }
 
 fn parse_chip_id(chip: &str) -> Option<u32> {

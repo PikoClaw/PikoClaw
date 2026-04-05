@@ -49,6 +49,8 @@ pub enum Delta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
     ThinkingDelta { thinking: String },
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

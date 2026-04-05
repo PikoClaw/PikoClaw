@@ -1,4 +1,4 @@
-use crate::app::{App, AppState, MessageRole};
+use crate::app::{App, AppState, ChatMessage, MessageRole};
 use crate::highlight::{highlight_code, parse_inline_spans, parse_segments, Segment};
 use crate::theme::Theme;
 use ratatui::{
@@ -53,27 +53,132 @@ pub fn render(frame: &mut Frame, app: &App) {
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 fn render_messages(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
+    let area_width = area.width as usize;
+    let height = area.height as usize;
+
     let all_lines: Vec<Line> = app
         .messages
         .iter()
-        .flat_map(|msg| message_to_lines(&msg.role, &msg.content, t))
+        .flat_map(|msg| message_to_lines(msg, t, area_width))
         .collect();
 
-    let total = all_lines.len();
-    let height = area.height as usize;
+    let total = all_lines.len().max(1);
+    app.last_total_lines.set(total);
+    app.last_frame_height.set(height);
 
-    // scroll=0 → show bottom (most recent); scroll=N → N lines above bottom.
     let max_scroll = total.saturating_sub(height);
-    let scroll = app.scroll.min(max_scroll);
-
-    let end = total.saturating_sub(scroll);
-    let start = end.saturating_sub(end.min(height));
+    let start = if app.follow_bottom {
+        max_scroll
+    } else {
+        app.scroll.min(max_scroll)
+    };
+    let end = (start + height).min(total);
 
     let visible: Vec<Line> = all_lines[start..end].to_vec();
     frame.render_widget(
         Paragraph::new(Text::from(visible)).style(Style::default().bg(t.bg)),
         area,
     );
+}
+
+/// Word-wrap a single logical line into multiple terminal rows with hanging indent.
+///
+/// The prefix width of the line (bullet, indent, etc.) is detected from the leading spans
+/// and used as the continuation indent so wrapped text aligns under the content, not column 0.
+fn word_wrap(spans: Vec<Span<'static>>, area_width: usize) -> Vec<Line<'static>> {
+    if area_width == 0 {
+        return vec![Line::from(spans)];
+    }
+    let total_w: usize = spans.iter().map(|s| s.width()).sum();
+    if total_w <= area_width {
+        return vec![Line::from(spans)];
+    }
+
+    // Measure the prefix (non-content leading spans) to compute hanging indent.
+    // Leading spans that are pure whitespace or punctuation markers ("• ", "│ ", "N. ", etc.)
+    // form the prefix; content text starts after them.
+    let prefix_w = leading_prefix_width(&spans);
+    let cont_indent: String = " ".repeat(prefix_w);
+
+    // Tokenise into (text, style, is_whitespace) so we can pack words onto lines.
+    let mut tokens: Vec<(String, Style, bool)> = Vec::new();
+    for span in &spans {
+        let style = span.style;
+        let mut buf = String::new();
+        let mut buf_ws = false;
+        for ch in span.content.chars() {
+            let ws = ch == ' ' || ch == '\t';
+            if buf.is_empty() {
+                buf_ws = ws;
+            } else if ws != buf_ws {
+                tokens.push((buf.clone(), style, buf_ws));
+                buf.clear();
+                buf_ws = ws;
+            }
+            buf.push(ch);
+        }
+        if !buf.is_empty() {
+            tokens.push((buf, style, buf_ws));
+        }
+    }
+
+    let mut result: Vec<Line<'static>> = Vec::new();
+    let mut cur: Vec<Span<'static>> = Vec::new();
+    let mut cur_w: usize = 0;
+    let mut first = true;
+
+    for (text, style, is_ws) in tokens {
+        let tok_w = text.chars().count();
+        if is_ws {
+            if cur_w > 0 && cur_w + tok_w <= area_width {
+                cur.push(Span::styled(text, style));
+                cur_w += tok_w;
+            }
+            continue;
+        }
+        if cur_w > 0 && cur_w + tok_w > area_width {
+            result.push(Line::from(std::mem::take(&mut cur)));
+            cur.push(Span::raw(cont_indent.clone()));
+            cur_w = prefix_w;
+            first = false;
+        }
+        cur.push(Span::styled(text, style));
+        cur_w += tok_w;
+    }
+    if !cur.is_empty() {
+        result.push(Line::from(cur));
+    }
+    if result.is_empty() {
+        result.push(Line::from(spans));
+    }
+    let _ = first;
+    result
+}
+
+/// Returns the display width of the "prefix" portion of a line's spans.
+///
+/// A prefix is the leading non-content part: whitespace, bullet markers, box-drawing chars.
+/// This is used to compute the hanging indent for wrapped continuation lines.
+fn leading_prefix_width(spans: &[Span<'static>]) -> usize {
+    let mut w = 0;
+    for span in spans {
+        let content = span.content.as_ref();
+        // Treat a span as part of the prefix if ALL its characters are
+        // whitespace or known marker characters (•, │, ⏺, ─, box-drawing range).
+        let is_prefix = content.chars().all(|c| {
+            c == ' ' || c == '\t' || c == '•' || c == '│' || c == '⏺'
+                || c == '─' || c == '╭' || c == '╰' || c == '╯' || c == '╮'
+                || c == '┌' || c == '└' || c == '┐' || c == '┘'
+                // ordered list: digits and ". "
+                || c.is_ascii_digit() || c == '.'
+        });
+        if is_prefix {
+            w += content.chars().count();
+        } else {
+            break;
+        }
+    }
+    w
 }
 
 /// Render a block-level markdown line (headings, lists, blockquotes, HR) into spans.
@@ -148,16 +253,81 @@ fn block_line_spans(
     parse_inline_spans(line, text_style, code_style)
 }
 
-fn message_to_lines(role: &MessageRole, content: &str, t: &Theme) -> Vec<Line<'static>> {
+fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line<'static>> {
+    let role = &msg.role;
+    let content: &str = &msg.content;
     match role {
-        MessageRole::User => {
+        MessageRole::ToolCall => {
+            let Some(info) = &msg.tool_info else {
+                return vec![];
+            };
             let mut lines: Vec<Line> = Vec::new();
-            for line in content.lines() {
+
+            // Status icon color: dim=pending, green=success, red=error
+            let (icon_color, icon_dim) = match &info.result {
+                None => (t.subtle, true),
+                Some(r) if r.is_error => (t.error, false),
+                Some(_) => (t.success, false),
+            };
+            let icon_style = if icon_dim {
+                Style::default().fg(icon_color).add_modifier(Modifier::DIM)
+            } else {
+                Style::default().fg(icon_color)
+            };
+
+            // Header: ⏺ ToolName(args)
+            let mut header_spans = vec![
+                Span::styled(format!("{} ", BLACK_CIRCLE), icon_style),
+                Span::styled(info.display_name.clone(), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+            ];
+            if !info.args_display.is_empty() {
+                // Show multi-line args (e.g. bash commands) on separate indented lines
+                let arg_lines: Vec<&str> = info.args_display.lines().collect();
+                header_spans.push(Span::styled("(", Style::default().fg(t.subtle)));
+                header_spans.push(Span::styled(arg_lines[0].to_string(), Style::default().fg(t.subtle)));
+                if arg_lines.len() == 1 {
+                    header_spans.push(Span::styled(")", Style::default().fg(t.subtle)));
+                    lines.extend(word_wrap(header_spans, area_width));
+                } else {
+                    lines.extend(word_wrap(header_spans, area_width));
+                    for extra in &arg_lines[1..] {
+                        let cont = Span::styled(
+                            format!("   {})", extra),
+                            Style::default().fg(t.subtle),
+                        );
+                        lines.push(Line::from(cont));
+                    }
+                }
+            } else {
+                lines.extend(word_wrap(header_spans, area_width));
+            }
+
+            // Result line (dim, indented)
+            if let Some(result) = &info.result {
+                let result_color = if result.is_error { t.error } else { t.subtle };
                 lines.push(Line::from(Span::styled(
-                    format!(" {} ", line),
-                    Style::default().fg(t.text).bg(t.user_msg_bg),
+                    format!("  {}", result.text),
+                    Style::default().fg(result_color).add_modifier(Modifier::DIM),
                 )));
             }
+            lines.push(Line::from(""));
+            lines
+        }
+
+        MessageRole::User => {
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(Line::from(Span::styled(
+                "╭─ You ".to_owned(),
+                Style::default().fg(t.subtle),
+            )));
+            for line in content.lines() {
+                let spans = vec![
+                    Span::styled("│ ", Style::default().fg(t.subtle)),
+                    Span::styled(line.to_owned(), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+                ];
+                lines.extend(word_wrap(spans, area_width));
+            }
+            lines.push(Line::from(Span::styled("╰─".to_owned(), Style::default().fg(t.subtle))));
             lines.push(Line::from(""));
             lines
         }
@@ -168,26 +338,82 @@ fn message_to_lines(role: &MessageRole, content: &str, t: &Theme) -> Vec<Line<'s
             let text_style = Style::default().fg(t.text);
             let code_style = Style::default().fg(t.permission);
 
+            // Helper: prepend the ⏺ or indent prefix to spans.
+            fn with_prefix(
+                content: Vec<Span<'static>>,
+                first_line: &mut bool,
+                claude_color: Color,
+            ) -> Vec<Span<'static>> {
+                if *first_line {
+                    *first_line = false;
+                    let mut s = vec![Span::styled(
+                        format!("{} ", BLACK_CIRCLE),
+                        Style::default().fg(claude_color),
+                    )];
+                    s.extend(content);
+                    s
+                } else {
+                    let mut s = vec![Span::raw("  ")];
+                    s.extend(content);
+                    s
+                }
+            }
+
             for segment in parse_segments(content) {
                 match segment {
                     Segment::Text(text) => {
+                        // pending_bullet: holds spans for a bullet line whose content
+                        // arrived on the next line (model multi-line **bold** pattern).
+                        let mut pending_bullet: Option<Vec<Span<'static>>> = None;
+
                         for raw_line in text.lines() {
                             let content_spans =
                                 block_line_spans(raw_line, text_style, code_style, t);
-                            let line = if first_line {
-                                first_line = false;
-                                let mut spans = vec![Span::styled(
-                                    format!("{} ", BLACK_CIRCLE),
-                                    Style::default().fg(t.claude),
-                                )];
-                                spans.extend(content_spans);
-                                Line::from(spans)
+
+                            if content_spans.is_empty() {
+                                // Flush a lone pending bullet before the blank line.
+                                if let Some(b) = pending_bullet.take() {
+                                    let spans = with_prefix(b, &mut first_line, t.claude);
+                                    lines.extend(word_wrap(spans, area_width));
+                                }
+                                if !first_line {
+                                    lines.push(Line::from(""));
+                                }
+                                continue;
+                            }
+
+                            // A "lone bullet" is a bullet marker with no following text
+                            // (e.g. "- **" where parse_inline_spans consumed the markers
+                            // but produced no visible content).
+                            let is_lone_bullet = content_spans.len() == 1
+                                && content_spans[0].content.as_ref() == "• ";
+
+                            if is_lone_bullet {
+                                // Flush any previous pending bullet first.
+                                if let Some(b) = pending_bullet.take() {
+                                    let spans = with_prefix(b, &mut first_line, t.claude);
+                                    lines.extend(word_wrap(spans, area_width));
+                                }
+                                pending_bullet = Some(content_spans);
+                                continue;
+                            }
+
+                            // Normal content: merge with a pending bullet if present.
+                            let merged = if let Some(mut b) = pending_bullet.take() {
+                                b.extend(content_spans);
+                                b
                             } else {
-                                let mut spans = vec![Span::raw("  ")];
-                                spans.extend(content_spans);
-                                Line::from(spans)
+                                content_spans
                             };
-                            lines.push(line);
+
+                            let spans = with_prefix(merged, &mut first_line, t.claude);
+                            lines.extend(word_wrap(spans, area_width));
+                        }
+
+                        // Flush any trailing lone bullet.
+                        if let Some(b) = pending_bullet.take() {
+                            let spans = with_prefix(b, &mut first_line, t.claude);
+                            lines.extend(word_wrap(spans, area_width));
                         }
                     }
                     Segment::Code { lang, body } => {
@@ -364,9 +590,27 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, 
         String::new()
     };
 
+    let scroll_part = if !app.follow_bottom {
+        let total = app.last_total_lines.get();
+        let height = app.last_frame_height.get();
+        let max_start = total.saturating_sub(height);
+        if max_start > 0 {
+            let pct = 100 - (app.scroll * 100 / max_start.max(1));
+            format!(" · ↑ {}%", pct.min(100))
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     let left_spans = vec![
         Span::styled(format!(" {} ", spinner), Style::default().fg(state_color)),
         Span::styled(token_part, Style::default().fg(t.subtle)),
+        Span::styled(
+            scroll_part,
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+        ),
         Span::styled(
             rate_limit_part,
             Style::default()

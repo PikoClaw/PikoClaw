@@ -27,6 +27,19 @@ pub enum ContentBlock {
     Thinking {
         thinking: String,
     },
+    ServerToolUse {
+        id: String,
+        name: String,
+        #[serde(default)]
+        input: serde_json::Value,
+    },
+    ServerToolResult {
+        tool_use_id: String,
+        #[serde(default)]
+        content: serde_json::Value,
+    },
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

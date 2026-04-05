@@ -330,9 +330,20 @@ pub fn parse_inline_spans(text: &str, text_style: Style, code_style: Style) -> V
         if b == b'*' && remaining.starts_with("**") {
             if let Some(close) = remaining[2..].find("**") {
                 let bold = remaining[2..2 + close].to_owned();
-                spans.push(Span::styled(bold, text_style.add_modifier(Modifier::BOLD)));
+                if !bold.is_empty() {
+                    spans.push(Span::styled(bold, text_style.add_modifier(Modifier::BOLD)));
+                }
                 i += 2 + close + 2;
                 continue;
+            } else {
+                // No closing ** on this line — treat the rest as bold, or skip if empty.
+                // This handles multi-line **bold** where the opener/closer appear alone.
+                let rest = &remaining[2..];
+                if !rest.is_empty() {
+                    spans.push(Span::styled(rest.to_owned(), text_style.add_modifier(Modifier::BOLD)));
+                }
+                // consumed all remaining text
+                break;
             }
         }
 

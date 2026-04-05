@@ -122,6 +122,12 @@ pub async fn run_turn(
                             tool_input_buffers.insert(index, String::new());
                         }
                         ContentBlock::Text { text } => {
+                            // If a previous text block exists (split by a server tool like web_search),
+                            // ensure there's a newline boundary so chunks don't run together.
+                            if !current_text.is_empty() && !current_text.ends_with('\n') {
+                                sink.emit(AgentEvent::TextChunk("\n".to_string())).await;
+                                current_text.push('\n');
+                            }
                             if !text.is_empty() {
                                 sink.emit(AgentEvent::TextChunk(text.clone())).await;
                                 current_text.push_str(text);
@@ -159,6 +165,7 @@ pub async fn run_turn(
                             existing.push_str(&thinking);
                         }
                     }
+                    Delta::Unknown => {}
                 },
                 StreamEvent::ContentBlockStop { index } => {
                     if let Some(buf) = tool_input_buffers.remove(&index) {
@@ -194,7 +201,7 @@ pub async fn run_turn(
 
         let history_blocks: Vec<ContentBlock> = content_blocks
             .iter()
-            .filter(|b| !b.is_thinking())
+            .filter(|b| matches!(b, ContentBlock::Text { .. } | ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. }))
             .cloned()
             .collect();
         context.push_assistant_blocks(history_blocks);
