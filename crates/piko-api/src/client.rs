@@ -53,15 +53,35 @@ impl AnthropicClient {
         Ok(Self {
             http,
             api_key: credential.into(),
-            base_url: base_url.into(),
+            base_url: base_url.into().trim_end_matches('/').to_string(),
             use_bearer_auth,
         })
     }
 
+    fn messages_url(&self) -> String {
+        format!("{}/v1/messages", self.base_url)
+    }
+
+    fn apply_request_headers(
+        &self,
+        builder: reqwest::RequestBuilder,
+        betas: Option<&[String]>,
+    ) -> reqwest::RequestBuilder {
+        let mut builder = if self.use_bearer_auth {
+            builder.header("Authorization", format!("Bearer {}", self.api_key))
+        } else {
+            builder.header("x-api-key", &self.api_key)
+        };
+        if let Some(betas) = betas.filter(|betas| !betas.is_empty()) {
+            builder = builder.header("anthropic-beta", betas.join(","));
+        }
+        builder
+    }
+
     pub fn messages_stream(&self, request: MessagesRequest) -> EventStream {
         let http = self.http.clone();
-        let api_key = self.api_key.clone();
-        let url = format!("{}/v1/messages", self.base_url);
+        let url = self.messages_url();
+        let auth_header_value = self.api_key.clone();
         let use_bearer_auth = self.use_bearer_auth;
 
         let stream = async_stream::try_stream! {
@@ -77,9 +97,9 @@ impl AnthropicClient {
             }
 
             let mut builder = if use_bearer_auth {
-                http.post(&url).header("Authorization", format!("Bearer {api_key}"))
+                http.post(&url).header("Authorization", format!("Bearer {auth_header_value}"))
             } else {
-                http.post(&url).header("x-api-key", &api_key)
+                http.post(&url).header("x-api-key", &auth_header_value)
             };
             if let Some(ref betas) = req.betas {
                 builder = builder.header("anthropic-beta", betas.join(","));
@@ -153,12 +173,8 @@ impl AnthropicClient {
             ..request
         };
 
-        let mut req_builder = self.http.post(format!("{}/v1/messages", self.base_url));
-        req_builder = if self.use_bearer_auth {
-            req_builder.header("Authorization", format!("Bearer {}", &self.api_key))
-        } else {
-            req_builder.header("x-api-key", &self.api_key)
-        };
+        let req_builder =
+            self.apply_request_headers(self.http.post(self.messages_url()), req.betas.as_deref());
         let resp = req_builder.json(&req).send().await?;
 
         let status = resp.status();
