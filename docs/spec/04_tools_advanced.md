@@ -1,6 +1,6 @@
 # Spec: Advanced Tools
 
-**Status**: ✅ Done (core set); ❌ Missing (task system, plan mode, worktrees, cron)
+**Status**: ✅ Done (core set + plan mode); ❌ Missing (task system, worktrees, cron)
 **Rust crate**: `piko-tools`, `piko-agent`
 **TS source**: `tools/AgentTool.tsx`, `tools/NotebookEditTool.tsx`, `tools/AskUserQuestionTool.tsx`, `tools/TodoWriteTool.tsx`
 

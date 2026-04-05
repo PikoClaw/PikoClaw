@@ -4,6 +4,18 @@
 
 ---
 
+## Implementation Status
+
+> **Status: ✅ Implemented in v0.8.0** (`crates/piko-tui/src/render.rs`, `crates/piko-tui/src/highlight.rs`)
+
+**Markdown rendering** — headings (`#`–`######`), unordered lists (`-`, `*`, `+` → `•`), ordered lists, blockquotes (`>` → `│`), horizontal rules, inline bold/italic/code.
+
+**Syntax highlighting** — fenced code blocks (` ```lang `) tokenised via `syntect` (same engine as `bat`). Theme-mapped: dark → Monokai Extended, light → InspiredGitHub, ansi → base16-ocean.dark.
+
+**Scroll** — clamped to bottom by default; `scroll=0` shows most recent output; `↑`/`↓` navigate when input history is not active.
+
+---
+
 ## Message Flow Layout
 
 Messages are rendered top-to-bottom in the chat pane. Each exchange is:

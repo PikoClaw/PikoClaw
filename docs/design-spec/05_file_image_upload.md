@@ -4,6 +4,15 @@
 
 ---
 
+## Implementation Status
+
+> **Text paste chips: ✅ Implemented in v0.8.0** (`crates/piko-tui/src/app.rs`)
+> **Image paste: ❌ Todo** | **@file mention: ❌ Todo**
+
+Bracketed paste (`EnableBracketedPaste`/`DisableBracketedPaste`) is active. Pastes exceeding 800 bytes or 2 lines are collapsed to a chip reference stored in `paste_store: HashMap<u32, String>`. Thresholds match Claude Code's `PASTE_THRESHOLD` and `maxLines` constants.
+
+---
+
 ## Overview
 
 PikoClaw supports three attachment methods:

@@ -14,8 +14,8 @@ Each file documents the *intended design* for porting to Rust/ratatui.
 | [01_color_theme_system.md](01_color_theme_system.md) | Color palettes, theme system, all theme variants |
 | [02_layout_and_spacing.md](02_layout_and_spacing.md) | Layout rules, flex model, borders, spacing |
 | [03_input_bar.md](03_input_bar.md) | Input bar, typeahead, @mentions, multi-line — **Input History Navigation ✅ v0.5.0** |
-| [04_message_rendering.md](04_message_rendering.md) | User/assistant messages, tool use display, diffs |
-| [05_file_image_upload.md](05_file_image_upload.md) | File attachment, image paste, @file syntax |
+| [04_message_rendering.md](04_message_rendering.md) | User/assistant messages, tool use display, diffs — **Syntax highlighting & markdown rendering ✅ v0.8.0** |
+| [05_file_image_upload.md](05_file_image_upload.md) | File attachment, image paste, @file syntax — **Text paste chips ✅ v0.8.0** |
 | [06_status_bar.md](06_status_bar.md) | Status bar layout, token display, rate limits |
 | [07_permission_dialogs.md](07_permission_dialogs.md) | Permission prompts, danger highlighting |
 | [08_notifications_alerts.md](08_notifications_alerts.md) | Toasts, banners, error overlays |

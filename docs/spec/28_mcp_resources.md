@@ -1,7 +1,7 @@
 # Spec: MCP Resource Reading
 
-**Status**: ❌ Todo
-**Rust crate**: `piko-mcp` (extend), `piko-tools` (new tools)
+**Status**: ✅ Done — `ListMcpResourcesTool` and `ReadMcpResourceTool` implemented; protocol types, client extension, and tool registration complete
+**Rust crate**: `piko-mcp` (`mcp_list_resources.rs`, `mcp_read_resource.rs`, `protocol.rs`), `piko-tools`
 **TS source**: `tools/ListMcpResourcesTool.tsx`, `tools/ReadMcpResourceTool.tsx`
 
 ---

@@ -1,6 +1,6 @@
 # Spec: MCP (Model Context Protocol) Integration
 
-**Status**: 🔶 Partial — tool bridge done; resource reading missing; auth missing
+**Status**: 🔶 Partial — tool bridge done; resource reading done (v0.4.0); auth missing
 **Rust crate**: `piko-mcp`
 **TS source**: `services/mcp/`
 
