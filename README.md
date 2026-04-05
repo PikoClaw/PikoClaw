@@ -113,23 +113,39 @@ pattern = "rm -rf *"
 decision = "deny"
 ```
 
+### Standard Anthropic API
+
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-## How to Use OpenRouter.ai API Key
+### Third-party providers (OpenRouter, etc.)
 
-- Set these Environment variables in `~/.zshrc` or `~/.bashrc`
+PikoClaw supports any provider that exposes an Anthropic-compatible API via Bearer-token auth — no `ANTHROPIC_API_KEY` required.
 
-```
-export OPENROUTER_API_KEY="sk-or-v1-6exxxxxxxxxxxxxxxxxxxxxxxxxxx"
+Add these to `~/.zshrc` or `~/.bashrc`:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-v1-..."
 export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
 export ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY"
-export ANTHROPIC_API_KEY=""
 
-# ADD YOUR OPENROUTER.AI MODEL ID HERE
-export ANTHROPIC_DEFAULT_SONNET_MODEL="stepfun/step-3.5-flash:free" 
+# Set the model ID from your chosen provider
+export ANTHROPIC_DEFAULT_SONNET_MODEL="stepfun/step-3.5-flash:free"
 ```
+
+> **Credential priority:** `ANTHROPIC_AUTH_TOKEN` (Bearer) takes precedence over `ANTHROPIC_API_KEY` (x-api-key) when both are set.
+
+### Environment variable reference
+
+| Variable | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | Standard Anthropic API key (`x-api-key` header) |
+| `ANTHROPIC_AUTH_TOKEN` | Bearer token for third-party providers (e.g. OpenRouter). Takes priority over `ANTHROPIC_API_KEY`. |
+| `ANTHROPIC_BASE_URL` | Override the API base URL (default: `https://api.anthropic.com`) |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Override the default model (e.g. `qwen/qwen3.6-plus:free`) |
+| `ANTHROPIC_MODEL` | Alternative model override (lower priority than `ANTHROPIC_DEFAULT_SONNET_MODEL`) |
+| `PIKOCLAW_CONFIG` | Override the config file path |
 
 ## Built-in Tools
 

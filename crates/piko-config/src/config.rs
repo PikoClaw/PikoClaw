@@ -20,6 +20,11 @@ pub struct ApiConfig {
     pub max_tokens: u32,
     pub base_url: String,
     pub api_key: Option<String>,
+    /// Bearer token for third-party providers (e.g. OpenRouter).
+    /// Populated from ANTHROPIC_AUTH_TOKEN. When set, `x-api-key` is replaced
+    /// with `Authorization: Bearer <token>` — no ANTHROPIC_API_KEY required.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_token: Option<String>,
     /// Maximum session cost in USD. When accumulated cost reaches this limit, the session stops.
     /// If None, no budget limit is enforced.
     #[serde(default)]

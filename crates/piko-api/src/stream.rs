@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use crate::response::{StopReason, Usage};
+use crate::response::{null_as_zero, StopReason, Usage};
 use futures_util::Stream;
 use piko_types::message::ContentBlock;
 use serde::{Deserialize, Serialize};
@@ -67,6 +67,7 @@ pub struct MessageDeltaData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaUsage {
+    #[serde(default, deserialize_with = "null_as_zero")]
     pub output_tokens: u32,
 }
 
@@ -84,8 +85,15 @@ pub fn parse_sse_line(event_type: &str, data: &str) -> Result<Option<StreamEvent
     if event_type == "ping" {
         return Ok(Some(StreamEvent::Ping));
     }
-    let event: StreamEvent = serde_json::from_str(data)
-        .map_err(|e| ApiError::Sse(format!("failed to parse event '{}': {}", data, e)))?;
+    let event: StreamEvent = serde_json::from_str(data).map_err(|e| {
+        // Truncate the raw data in the error so the TUI status bar doesn't overflow
+        let preview = if data.len() > 120 {
+            format!("{}…", &data[..120])
+        } else {
+            data.to_string()
+        };
+        ApiError::Sse(format!("failed to parse event '{}': {}", preview, e))
+    })?;
     Ok(Some(event))
 }
 

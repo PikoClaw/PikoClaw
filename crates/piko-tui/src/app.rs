@@ -4,10 +4,7 @@ use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
 use async_trait::async_trait;
-use crossterm::event::{
-    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
-    Event, MouseEventKind,
-};
+use crossterm::event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, MouseEventKind};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -237,14 +234,12 @@ impl App {
         let mut stdout = stdout();
         stdout.execute(EnterAlternateScreen)?;
         stdout.execute(EnableBracketedPaste)?;
-        stdout.execute(EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
         let result = self.event_loop(&mut terminal).await;
 
         disable_raw_mode()?;
-        terminal.backend_mut().execute(DisableMouseCapture)?;
         terminal.backend_mut().execute(DisableBracketedPaste)?;
         terminal.backend_mut().execute(LeaveAlternateScreen)?;
         terminal.show_cursor()?;

@@ -1,0 +1,19 @@
+[package]
+name = "piko-oauth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OAuth 2.0 PKCE authentication for PikoClaw"
+repository.workspace = true
+
+[dependencies]
+tokio.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+directories.workspace = true
+piko-config.workspace = true
+sha2 = "0.10"
+rand = "0.8"

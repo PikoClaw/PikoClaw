@@ -18,6 +18,37 @@ const SPINNER_CYCLE: &[&str] = &["·", "✢", "✳", "✶", "✻", "✽", "✻",
 const BLACK_CIRCLE: &str = "⏺"; // macOS variant (⏺ U+23FA)
 const POINTER: &str = "❯"; // figures.pointer
 
+/// Compute how many terminal rows the input bar needs given the current text
+/// and terminal width.
+///
+/// Accounts for:
+/// - 2 border rows (rounded box top + bottom)
+/// - The `"> "` 2-char prefix on the first line of each logical (newline-split) line
+/// - ratatui `Wrap` breaking at inner width (`area.width - 2`)
+/// - A cap of 10 rows so the input never consumes more than ~a third of a
+///   normal 30-row terminal
+fn input_bar_height(input: &str, area_width: u16) -> u16 {
+    // Inner width = terminal width minus left+right borders
+    let inner = area_width.saturating_sub(2) as usize;
+    if inner == 0 {
+        return 3;
+    }
+
+    // Each logical line (split by \n) occupies ceil((2 + char_count) / inner) visual rows.
+    // The 2 accounts for the "> " / "  " prefix the widget draws on every line.
+    let visual_rows: usize = input
+        .split('\n')
+        .map(|seg| {
+            let char_count = 2 + seg.chars().count(); // 2 = prefix width
+            char_count.div_ceil(inner).max(1)
+        })
+        .sum::<usize>()
+        .max(1); // always at least one row even when input is empty
+
+    // 2 border rows + content rows; clamp to [3, 10]
+    (visual_rows as u16 + 2).clamp(3, 10)
+}
+
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
     let t = app.theme;
@@ -25,13 +56,15 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Paint the full-frame background so terminal default doesn't bleed through.
     frame.render_widget(Block::default().style(Style::default().bg(t.bg)), area);
 
-    // 3-row vertical layout: messages | status | input
+    // Input bar height grows with the text so long lines wrap instead of clipping.
+    let input_height = input_bar_height(&app.input, area.width);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
             Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Length(input_height),
         ])
         .split(area);
 

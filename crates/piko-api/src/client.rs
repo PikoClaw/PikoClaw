@@ -11,18 +11,33 @@ const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 
 pub struct AnthropicClient {
     http: reqwest::Client,
+    /// The credential value (API key or OAuth/Bearer token).
     api_key: String,
     base_url: String,
+    /// When `true`, send `Authorization: Bearer <api_key>` instead of `x-api-key`.
+    /// Use this for third-party providers such as OpenRouter that accept Bearer tokens
+    /// via ANTHROPIC_AUTH_TOKEN.
+    use_bearer_auth: bool,
 }
 
 impl AnthropicClient {
     pub fn new(api_key: impl Into<String>) -> Result<Self, ApiError> {
-        Self::with_base_url(api_key, DEFAULT_BASE_URL)
+        Self::with_options(api_key, DEFAULT_BASE_URL, false)
     }
 
     pub fn with_base_url(
         api_key: impl Into<String>,
         base_url: impl Into<String>,
+    ) -> Result<Self, ApiError> {
+        Self::with_options(api_key, base_url, false)
+    }
+
+    /// Full constructor used when a custom base URL and/or Bearer auth is required
+    /// (e.g. OpenRouter with ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN).
+    pub fn with_options(
+        credential: impl Into<String>,
+        base_url: impl Into<String>,
+        use_bearer_auth: bool,
     ) -> Result<Self, ApiError> {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -37,8 +52,9 @@ impl AnthropicClient {
 
         Ok(Self {
             http,
-            api_key: api_key.into(),
+            api_key: credential.into(),
             base_url: base_url.into(),
+            use_bearer_auth,
         })
     }
 
@@ -46,6 +62,7 @@ impl AnthropicClient {
         let http = self.http.clone();
         let api_key = self.api_key.clone();
         let url = format!("{}/v1/messages", self.base_url);
+        let use_bearer_auth = self.use_bearer_auth;
 
         let stream = async_stream::try_stream! {
             let req = MessagesRequest { stream: true, ..request };
@@ -59,7 +76,11 @@ impl AnthropicClient {
                 obj.insert("messages".to_string(), serde_json::Value::Array(messages_with_cache));
             }
 
-            let mut builder = http.post(&url).header("x-api-key", &api_key);
+            let mut builder = if use_bearer_auth {
+                http.post(&url).header("Authorization", format!("Bearer {api_key}"))
+            } else {
+                http.post(&url).header("x-api-key", &api_key)
+            };
             if let Some(ref betas) = req.betas {
                 builder = builder.header("anthropic-beta", betas.join(","));
             }
@@ -132,13 +153,13 @@ impl AnthropicClient {
             ..request
         };
 
-        let resp = self
-            .http
-            .post(format!("{}/v1/messages", self.base_url))
-            .header("x-api-key", &self.api_key)
-            .json(&req)
-            .send()
-            .await?;
+        let mut req_builder = self.http.post(format!("{}/v1/messages", self.base_url));
+        req_builder = if self.use_bearer_auth {
+            req_builder.header("Authorization", format!("Bearer {}", &self.api_key))
+        } else {
+            req_builder.header("x-api-key", &self.api_key)
+        };
+        let resp = req_builder.json(&req).send().await?;
 
         let status = resp.status();
         let retry_after = resp

@@ -26,11 +26,17 @@ pub fn load_config() -> Result<PikoConfig> {
         config.api.api_key = Some(api_key);
     }
 
+    // ANTHROPIC_AUTH_TOKEN enables Bearer-token auth for third-party providers (e.g. OpenRouter).
+    if let Some(auth_token) = env::anthropic_auth_token() {
+        config.api.auth_token = Some(auth_token);
+    }
+
     if let Some(base_url) = env::anthropic_base_url() {
         config.api.base_url = base_url;
     }
 
-    if let Some(model) = env::anthropic_model() {
+    // ANTHROPIC_DEFAULT_SONNET_MODEL mirrors claude-code's model-slot override.
+    if let Some(model) = env::anthropic_default_sonnet_model().or_else(env::anthropic_model) {
         config.api.model = model.into();
     }
 

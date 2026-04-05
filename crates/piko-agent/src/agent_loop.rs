@@ -34,6 +34,11 @@ pub async fn run_turn(
     let mut turns = 0;
     let mut final_text = String::new();
 
+    // Tracks whether optional API features are supported by the current provider.
+    // Set to false on the first 4xx error mentioning the feature; subsequent
+    // requests simply omit it so the agent keeps working instead of crashing.
+    let mut web_search_supported = true;
+
     loop {
         if turns >= max_turns {
             sink.emit(AgentEvent::Error(format!(
@@ -52,7 +57,7 @@ pub async fn run_turn(
             .with_max_tokens(config.max_tokens)
             .with_tools(tools.definitions());
 
-        if tools.has_web_search() {
+        if tools.has_web_search() && web_search_supported {
             request = request
                 .with_raw_tool(serde_json::json!({
                     "type": "web_search_20250305",
@@ -85,23 +90,55 @@ pub async fn run_turn(
         let mut cache_creation_tokens = 0u32;
         let mut cache_read_tokens = 0u32;
         let mut current_text = String::new();
+        let mut stream_retry = false;
 
-        while let Some(event_result) = stream.next().await {
+        'stream: while let Some(event_result) = stream.next().await {
             if cancellation.is_cancelled() {
                 return Err(anyhow!("cancelled"));
             }
 
             let event = match event_result {
                 Ok(e) => e,
-                Err(e) => {
-                    if let ApiError::RateLimit { retry_after } = &e {
-                        sink.emit(AgentEvent::RateLimit {
-                            retry_after: *retry_after,
-                        })
+                Err(ApiError::RateLimit { retry_after }) => {
+                    sink.emit(AgentEvent::RateLimit { retry_after }).await;
+                    return Err(anyhow!("rate limited"));
+                }
+                Err(ApiError::Auth(msg)) => {
+                    sink.emit(AgentEvent::Error(format!("Authentication error: {msg}")))
                         .await;
-                    } else {
-                        sink.emit(AgentEvent::Error(e.to_string())).await;
+                    return Err(anyhow!("auth error: {msg}"));
+                }
+                Err(ApiError::ApiResponse {
+                    status,
+                    ref message,
+                }) if is_unsupported_feature_error(status, message) => {
+                    // Provider doesn't support an optional Anthropic-specific feature
+                    // (e.g. native web search beta). Disable it and retry silently.
+                    if web_search_supported && is_web_search_error(message) {
+                        web_search_supported = false;
+                        sink.emit(AgentEvent::Error(
+                            "Web search is not supported by this provider — retrying without it."
+                                .to_string(),
+                        ))
+                        .await;
+                        stream_retry = true;
+                        break 'stream;
                     }
+                    // Unknown unsupported feature — surface the error but don't crash.
+                    let msg = format!("API error {status}: {message}");
+                    sink.emit(AgentEvent::Error(msg.clone())).await;
+                    // If the model had already issued tool calls before this error,
+                    // return them as error results so it can recover. Otherwise stop.
+                    if content_blocks
+                        .iter()
+                        .any(|b| matches!(b, ContentBlock::ToolUse { .. }))
+                    {
+                        break 'stream;
+                    }
+                    return Err(anyhow!("{msg}"));
+                }
+                Err(e) => {
+                    sink.emit(AgentEvent::Error(e.to_string())).await;
                     return Err(e.into());
                 }
             };
@@ -189,10 +226,25 @@ pub async fn run_turn(
                 }
                 StreamEvent::Ping => {}
                 StreamEvent::Error { error } => {
+                    // SSE-level error event from the API. Treat as non-fatal if
+                    // tool calls were already in progress; the model will see the
+                    // error as a tool result and can recover.
                     sink.emit(AgentEvent::Error(error.message.clone())).await;
+                    if content_blocks
+                        .iter()
+                        .any(|b| matches!(b, ContentBlock::ToolUse { .. }))
+                    {
+                        break 'stream;
+                    }
                     return Err(anyhow!("API stream error: {}", error.message));
                 }
             }
+        }
+
+        // Provider didn't support a feature — retry this turn without it.
+        // Don't push empty content to context and don't count as a turn.
+        if stream_retry {
+            continue;
         }
 
         if !current_text.is_empty() {
@@ -315,6 +367,25 @@ pub async fn run_turn(
     }
 
     Ok(final_text)
+}
+
+/// Returns true when the API error indicates a provider doesn't support an
+/// optional Anthropic-specific feature (e.g. a beta endpoint).
+/// These are recoverable: we disable the feature and retry.
+fn is_unsupported_feature_error(status: u16, message: &str) -> bool {
+    matches!(status, 400 | 404) && {
+        let m = message.to_ascii_lowercase();
+        m.contains("web search")
+            || m.contains("no endpoints found")
+            || m.contains("not supported")
+            || m.contains("unsupported")
+    }
+}
+
+/// Returns true when the error specifically mentions web search.
+fn is_web_search_error(message: &str) -> bool {
+    let m = message.to_ascii_lowercase();
+    m.contains("web search") || m.contains("no endpoints found")
 }
 
 #[cfg(test)]

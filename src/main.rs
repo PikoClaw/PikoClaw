@@ -45,21 +45,33 @@ async fn main() -> Result<()> {
         config.api.model = piko_types::model::ModelId::from_alias(model);
     }
 
-    let api_key = config
-        .api
-        .api_key
-        .clone()
-        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-        .ok_or_else(|| {
-            anyhow!("ANTHROPIC_API_KEY not set. Set it via environment variable or config file.")
-        })?;
+    // Resolve credential following the same priority as claude-code:
+    //   1. ANTHROPIC_AUTH_TOKEN  → Bearer-token auth (e.g. OpenRouter)
+    //   2. ANTHROPIC_API_KEY     → standard x-api-key auth
+    //   3. Stored OAuth tokens   → refresh silently or run browser login flow
+    // ANTHROPIC_BASE_URL is already applied to config.api.base_url by load_config().
+    let (credential, use_bearer_auth) = if let Some(token) = config.api.auth_token.clone() {
+        (token, true)
+    } else if let Some(key) = config.api.api_key.clone() {
+        (key, false)
+    } else {
+        // No explicit credentials — try stored OAuth tokens or run browser login.
+        let tokens = piko_oauth::run_login_flow().await?;
+        // Console users get an API key written into config by run_login_flow;
+        // claude.ai subscribers get a Bearer access token.
+        let use_bearer = tokens.refresh_token.is_some() || tokens.expires_at_ms != u64::MAX;
+        (tokens.access_token, use_bearer)
+    };
+
+    let base_url = config.api.base_url.clone();
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
     match cli.command {
         Some(Commands::Resume { ref session_id }) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
-            let mut agent = Agent::new(agent_config, &api_key)?;
+            let mut agent =
+                Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
             let store = Arc::new(FilesystemSessionStore::with_default_path());
 
             let session = SessionStore::load(store.as_ref(), session_id)
@@ -72,7 +84,8 @@ async fn main() -> Result<()> {
         }
         Some(Commands::Continue) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
-            let mut agent = Agent::new(agent_config, &api_key)?;
+            let mut agent =
+                Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
             let store = Arc::new(FilesystemSessionStore::with_default_path());
 
             if let Some(session) =
@@ -92,13 +105,15 @@ async fn main() -> Result<()> {
         None => {
             if let Some(ref prompt) = cli.print {
                 let agent_config = build_agent_config(&config, &cli, cwd);
-                let mut agent = Agent::new(agent_config, &api_key)?;
+                let mut agent =
+                    Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
                 agent.run_print(prompt).await?;
                 println!();
                 Ok(())
             } else {
                 let agent_config = build_agent_config(&config, &cli, cwd.clone());
-                let mut agent = Agent::new(agent_config, &api_key)?;
+                let mut agent =
+                    Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
                 let store = Arc::new(FilesystemSessionStore::with_default_path());
                 let session = piko_session::session::Session::new(
                     cwd.to_string_lossy().to_string(),
