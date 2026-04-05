@@ -11,6 +11,7 @@
 [![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
 [![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
 ![GitHub Downloads](https://img.shields.io/github/downloads/pikoclaw/pikoclaw/total)
+![GitHub release](https://img.shields.io/github/v/release/pikoclaw/pikoclaw)
 
 </div>
 
