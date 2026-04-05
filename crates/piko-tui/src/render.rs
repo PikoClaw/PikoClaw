@@ -278,23 +278,27 @@ fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line
             // Header: ⏺ ToolName(args)
             let mut header_spans = vec![
                 Span::styled(format!("{} ", BLACK_CIRCLE), icon_style),
-                Span::styled(info.display_name.clone(), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    info.display_name.clone(),
+                    Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+                ),
             ];
             if !info.args_display.is_empty() {
                 // Show multi-line args (e.g. bash commands) on separate indented lines
                 let arg_lines: Vec<&str> = info.args_display.lines().collect();
                 header_spans.push(Span::styled("(", Style::default().fg(t.subtle)));
-                header_spans.push(Span::styled(arg_lines[0].to_string(), Style::default().fg(t.subtle)));
+                header_spans.push(Span::styled(
+                    arg_lines[0].to_string(),
+                    Style::default().fg(t.subtle),
+                ));
                 if arg_lines.len() == 1 {
                     header_spans.push(Span::styled(")", Style::default().fg(t.subtle)));
                     lines.extend(word_wrap(header_spans, area_width));
                 } else {
                     lines.extend(word_wrap(header_spans, area_width));
                     for extra in &arg_lines[1..] {
-                        let cont = Span::styled(
-                            format!("   {})", extra),
-                            Style::default().fg(t.subtle),
-                        );
+                        let cont =
+                            Span::styled(format!("   {})", extra), Style::default().fg(t.subtle));
                         lines.push(Line::from(cont));
                     }
                 }
@@ -307,7 +311,9 @@ fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line
                 let result_color = if result.is_error { t.error } else { t.subtle };
                 lines.push(Line::from(Span::styled(
                     format!("  {}", result.text),
-                    Style::default().fg(result_color).add_modifier(Modifier::DIM),
+                    Style::default()
+                        .fg(result_color)
+                        .add_modifier(Modifier::DIM),
                 )));
             }
             lines.push(Line::from(""));
@@ -323,11 +329,17 @@ fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line
             for line in content.lines() {
                 let spans = vec![
                     Span::styled("│ ", Style::default().fg(t.subtle)),
-                    Span::styled(line.to_owned(), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        line.to_owned(),
+                        Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+                    ),
                 ];
                 lines.extend(word_wrap(spans, area_width));
             }
-            lines.push(Line::from(Span::styled("╰─".to_owned(), Style::default().fg(t.subtle))));
+            lines.push(Line::from(Span::styled(
+                "╰─".to_owned(),
+                Style::default().fg(t.subtle),
+            )));
             lines.push(Line::from(""));
             lines
         }
@@ -1145,18 +1157,20 @@ mod tests {
     // ── message_to_lines scroll viewport ──────────────────────────────────────
 
     #[test]
-    fn message_to_lines_user_has_bg() {
+    fn message_to_lines_user_has_box() {
         let t = crate::theme::by_name("dark");
-        let lines = message_to_lines(&MessageRole::User, "hello", t);
+        let msg = ChatMessage::text(MessageRole::User, "hello");
+        let lines = message_to_lines(&msg, t, 80);
         assert!(!lines.is_empty());
-        let first_span = &lines[0].spans[0];
-        assert_eq!(first_span.style.bg, Some(t.user_msg_bg));
+        let first_text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(first_text.contains('╭') || first_text.contains("You"));
     }
 
     #[test]
     fn message_to_lines_assistant_starts_with_circle() {
         let t = crate::theme::by_name("dark");
-        let lines = message_to_lines(&MessageRole::Assistant, "hi there", t);
+        let msg = ChatMessage::text(MessageRole::Assistant, "hi there");
+        let lines = message_to_lines(&msg, t, 80);
         assert!(!lines.is_empty());
         assert!(lines[0].spans[0].content.contains('⏺'));
     }
@@ -1164,7 +1178,8 @@ mod tests {
     #[test]
     fn message_to_lines_assistant_markdown_heading() {
         let t = crate::theme::by_name("dark");
-        let lines = message_to_lines(&MessageRole::Assistant, "# Title\ntext", t);
+        let msg = ChatMessage::text(MessageRole::Assistant, "# Title\ntext");
+        let lines = message_to_lines(&msg, t, 80);
         let all_text: String = lines[0]
             .spans
             .iter()

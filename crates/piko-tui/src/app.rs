@@ -106,7 +106,11 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     pub fn text(role: MessageRole, content: impl Into<String>) -> Self {
-        Self { role, content: content.into(), tool_info: None }
+        Self {
+            role,
+            content: content.into(),
+            tool_info: None,
+        }
     }
 }
 
@@ -337,8 +341,8 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: msg.to_string(),
-                tool_info: None,
-        });
+                    tool_info: None,
+                });
                 self.state = AppState::WaitingForAgent;
             }
             return Ok(());
@@ -577,8 +581,8 @@ impl App {
                     self.messages.push(ChatMessage {
                         role: MessageRole::System,
                         content: msg.to_string(),
-                    tool_info: None,
-        });
+                        tool_info: None,
+                    });
                 }
                 "cost" => {
                     self.show_cost_summary();
@@ -672,7 +676,7 @@ impl App {
         self.messages.push(ChatMessage {
             role: MessageRole::System,
             content,
-                    tool_info: None,
+            tool_info: None,
         });
     }
 
@@ -715,7 +719,7 @@ impl App {
         self.messages.push(ChatMessage {
             role: MessageRole::System,
             content: format!("[compact] conversation summarized:\n{}", summary),
-                tool_info: None,
+            tool_info: None,
         });
     }
 
@@ -723,7 +727,7 @@ impl App {
         self.messages.push(ChatMessage {
             role: MessageRole::User,
             content: display_content,
-        tool_info: None,
+            tool_info: None,
         });
         self.scroll = 0;
         self.follow_bottom = true;
@@ -829,8 +833,8 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::Assistant,
                     content: text,
-                tool_info: None,
-        });
+                    tool_info: None,
+                });
             }
             AgentEvent::ThinkingChunk(text) => {
                 if let Some(last) = self.messages.last_mut() {
@@ -861,9 +865,12 @@ impl App {
             }
             AgentEvent::ToolCallCompleted { call, result } => {
                 let summary = tool_result_summary(&call.name, &call.input, &result);
-                if let Some(msg) = self.messages.iter_mut().rev().find(|m| {
-                    m.tool_info.as_ref().map_or(false, |t| t.id == call.id)
-                }) {
+                if let Some(msg) = self
+                    .messages
+                    .iter_mut()
+                    .rev()
+                    .find(|m| m.tool_info.as_ref().is_some_and(|t| t.id == call.id))
+                {
                     if let Some(info) = msg.tool_info.as_mut() {
                         info.result = Some(ToolResultSummary {
                             is_error: result.is_error,
@@ -901,7 +908,7 @@ impl App {
                                 "Budget limit reached ({}). Session stopped.",
                                 piko_api::format_cost(max)
                             ),
-                                    tool_info: None,
+                            tool_info: None,
                         });
                         self.state = AppState::Exiting;
                     }
@@ -912,7 +919,7 @@ impl App {
                 self.messages.push(ChatMessage {
                     role: MessageRole::System,
                     content: format!("Error: {}", msg),
-                tool_info: None,
+                    tool_info: None,
                 });
             }
             AgentEvent::RateLimit { retry_after } => {
@@ -979,52 +986,82 @@ pub fn tool_args_display(name: &str, input: &serde_json::Value, cwd_raw: &str) -
                 String::new()
             }
         }
-        "file_read" | "file_write" | "file_edit" => {
-            input.get("file_path")
-                .or_else(|| input.get("path"))
-                .and_then(|v| v.as_str())
-                .map(|p| shorten_path(p, cwd_raw))
-                .unwrap_or_default()
-        }
+        "file_read" | "file_write" | "file_edit" => input
+            .get("file_path")
+            .or_else(|| input.get("path"))
+            .and_then(|v| v.as_str())
+            .map(|p| shorten_path(p, cwd_raw))
+            .unwrap_or_default(),
         "glob" => {
             let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
             match input.get("path").and_then(|v| v.as_str()) {
-                Some(p) => format!("pattern: \"{}\", path: \"{}\"", pattern, shorten_path(p, cwd_raw)),
+                Some(p) => format!(
+                    "pattern: \"{}\", path: \"{}\"",
+                    pattern,
+                    shorten_path(p, cwd_raw)
+                ),
                 None => format!("pattern: \"{}\"", pattern),
             }
         }
         "grep" => {
             let pattern = input.get("pattern").and_then(|v| v.as_str()).unwrap_or("");
             match input.get("path").and_then(|v| v.as_str()) {
-                Some(p) => format!("pattern: \"{}\", path: \"{}\"", pattern, shorten_path(p, cwd_raw)),
+                Some(p) => format!(
+                    "pattern: \"{}\", path: \"{}\"",
+                    pattern,
+                    shorten_path(p, cwd_raw)
+                ),
                 None => format!("pattern: \"{}\"", pattern),
             }
         }
-        "web_fetch" => {
-            input.get("url").and_then(|v| v.as_str())
-                .map(|u| if u.len() > 60 { format!("{}…", &u[..60]) } else { u.to_string() })
-                .unwrap_or_default()
-        }
-        "web_search" => {
-            input.get("query").and_then(|v| v.as_str())
-                .map(|q| if q.len() > 80 { format!("{}…", &q[..80]) } else { q.to_string() })
-                .unwrap_or_default()
-        }
-        "AskUserQuestion" | "ask_user_question" => {
-            input.get("question").and_then(|v| v.as_str())
-                .map(|q| if q.len() > 80 { format!("{}…", &q[..80]) } else { q.to_string() })
-                .unwrap_or_default()
-        }
+        "web_fetch" => input
+            .get("url")
+            .and_then(|v| v.as_str())
+            .map(|u| {
+                if u.len() > 60 {
+                    format!("{}…", &u[..60])
+                } else {
+                    u.to_string()
+                }
+            })
+            .unwrap_or_default(),
+        "web_search" => input
+            .get("query")
+            .and_then(|v| v.as_str())
+            .map(|q| {
+                if q.len() > 80 {
+                    format!("{}…", &q[..80])
+                } else {
+                    q.to_string()
+                }
+            })
+            .unwrap_or_default(),
+        "AskUserQuestion" | "ask_user_question" => input
+            .get("question")
+            .and_then(|v| v.as_str())
+            .map(|q| {
+                if q.len() > 80 {
+                    format!("{}…", &q[..80])
+                } else {
+                    q.to_string()
+                }
+            })
+            .unwrap_or_default(),
         _ => String::new(),
     }
 }
 
 /// Returns a one-line result summary (e.g. "Read 42 lines", "Wrote 10 lines to src/main.rs").
-pub fn tool_result_summary(name: &str, input: &serde_json::Value, result: &piko_types::tool::ToolResult) -> String {
+pub fn tool_result_summary(
+    name: &str,
+    input: &serde_json::Value,
+    result: &piko_types::tool::ToolResult,
+) -> String {
     if result.is_error {
         let content = result.content.trim();
         let msg = content
-            .split("<tool_use_error>").nth(1)
+            .split("<tool_use_error>")
+            .nth(1)
             .and_then(|s| s.split("</tool_use_error>").next())
             .map(|s| s.trim())
             .unwrap_or(content);
@@ -1042,13 +1079,18 @@ pub fn tool_result_summary(name: &str, input: &serde_json::Value, result: &piko_
                 format!("Read {} lines", lines)
             }
             "file_write" => {
-                let path = input.get("file_path").or_else(|| input.get("path"))
-                    .and_then(|v| v.as_str()).unwrap_or("");
+                let path = input
+                    .get("file_path")
+                    .or_else(|| input.get("path"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let lines = result.content.lines().count();
                 let home = std::env::var("HOME").unwrap_or_default();
                 let display = if !home.is_empty() && path.starts_with(&home) {
                     format!("~{}", &path[home.len()..])
-                } else { path.to_string() };
+                } else {
+                    path.to_string()
+                };
                 if display.is_empty() {
                     format!("Wrote {} lines", lines)
                 } else {
@@ -1056,24 +1098,37 @@ pub fn tool_result_summary(name: &str, input: &serde_json::Value, result: &piko_
                 }
             }
             "file_edit" => {
-                let path = input.get("file_path").or_else(|| input.get("path"))
-                    .and_then(|v| v.as_str()).unwrap_or("");
+                let path = input
+                    .get("file_path")
+                    .or_else(|| input.get("path"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if path.is_empty() {
                     "Updated file".to_string()
                 } else {
                     let home = std::env::var("HOME").unwrap_or_default();
                     let display = if !home.is_empty() && path.starts_with(&home) {
                         format!("~{}", &path[home.len()..])
-                    } else { path.to_string() };
+                    } else {
+                        path.to_string()
+                    };
                     format!("Updated {}", display)
                 }
             }
             "glob" => {
-                let count = result.content.lines().filter(|l| !l.trim().is_empty()).count();
+                let count = result
+                    .content
+                    .lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .count();
                 format!("Found {} files", count)
             }
             "grep" => {
-                let count = result.content.lines().filter(|l| !l.trim().is_empty()).count();
+                let count = result
+                    .content
+                    .lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .count();
                 format!("Found {} lines", count)
             }
             "bash" => {
@@ -1082,15 +1137,27 @@ pub fn tool_result_summary(name: &str, input: &serde_json::Value, result: &piko_
                     "(No output)".to_string()
                 } else {
                     let first = content.lines().next().unwrap_or("");
-                    if first.len() > 80 { format!("{}…", &first[..80]) } else { first.to_string() }
+                    if first.len() > 80 {
+                        format!("{}…", &first[..80])
+                    } else {
+                        first.to_string()
+                    }
                 }
             }
             "web_fetch" => {
                 let kb = result.content.len() / 1024;
-                if kb > 0 { format!("Fetched {}KB", kb) } else { format!("Fetched {}B", result.content.len()) }
+                if kb > 0 {
+                    format!("Fetched {}KB", kb)
+                } else {
+                    format!("Fetched {}B", result.content.len())
+                }
             }
             "web_search" => {
-                let count = result.content.lines().filter(|l| !l.trim().is_empty()).count();
+                let count = result
+                    .content
+                    .lines()
+                    .filter(|l| !l.trim().is_empty())
+                    .count();
                 format!("Found {} results", count)
             }
             _ => String::new(),
@@ -1102,7 +1169,11 @@ fn shorten_path(path: &str, cwd_raw: &str) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     // First try to make relative to cwd
     if !cwd_raw.is_empty() {
-        let cwd_slash = if cwd_raw.ends_with('/') { cwd_raw.to_string() } else { format!("{}/", cwd_raw) };
+        let cwd_slash = if cwd_raw.ends_with('/') {
+            cwd_raw.to_string()
+        } else {
+            format!("{}/", cwd_raw)
+        };
         if path.starts_with(&cwd_slash) {
             return path[cwd_slash.len()..].to_string();
         }

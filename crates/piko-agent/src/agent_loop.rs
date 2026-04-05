@@ -201,7 +201,14 @@ pub async fn run_turn(
 
         let history_blocks: Vec<ContentBlock> = content_blocks
             .iter()
-            .filter(|b| matches!(b, ContentBlock::Text { .. } | ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. }))
+            .filter(|b| {
+                matches!(
+                    b,
+                    ContentBlock::Text { .. }
+                        | ContentBlock::ToolUse { .. }
+                        | ContentBlock::ToolResult { .. }
+                )
+            })
             .cloned()
             .collect();
         context.push_assistant_blocks(history_blocks);

@@ -340,7 +340,10 @@ pub fn parse_inline_spans(text: &str, text_style: Style, code_style: Style) -> V
                 // This handles multi-line **bold** where the opener/closer appear alone.
                 let rest = &remaining[2..];
                 if !rest.is_empty() {
-                    spans.push(Span::styled(rest.to_owned(), text_style.add_modifier(Modifier::BOLD)));
+                    spans.push(Span::styled(
+                        rest.to_owned(),
+                        text_style.add_modifier(Modifier::BOLD),
+                    ));
                 }
                 // consumed all remaining text
                 break;
