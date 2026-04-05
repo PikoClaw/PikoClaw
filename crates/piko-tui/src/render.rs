@@ -847,29 +847,14 @@ fn render_input_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t
             Span::raw(cursor),
         ])]
     } else {
-        let input_with_cursor = format!(
-            "{}{}{}",
-            &app.input[..app.cursor_pos],
+        render_input_lines(
+            &app.input,
+            app.cursor_pos,
             cursor,
-            &app.input[app.cursor_pos..]
-        );
-        input_with_cursor
-            .split('\n')
-            .enumerate()
-            .map(|(i, line)| {
-                if i == 0 {
-                    Line::from(vec![
-                        Span::styled(format!("{} ", POINTER), pointer_style),
-                        Span::styled(line.to_owned(), text_style),
-                    ])
-                } else {
-                    Line::from(vec![
-                        Span::raw("  "),
-                        Span::styled(line.to_owned(), text_style),
-                    ])
-                }
-            })
-            .collect()
+            pointer_style,
+            text_style,
+            t,
+        )
     };
 
     let border_color = if is_loading {
@@ -890,6 +875,109 @@ fn render_input_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t
             .wrap(Wrap { trim: false }),
         area,
     );
+}
+
+fn render_input_lines<'a>(
+    input: &'a str,
+    cursor_pos: usize,
+    cursor: &'a str,
+    pointer_style: Style,
+    text_style: Style,
+    t: &Theme,
+) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    let mut offset = 0usize;
+    for (i, line) in input.split('\n').enumerate() {
+        let line_end = offset + line.len();
+        let mut spans = if i == 0 {
+            vec![Span::styled(format!("{} ", POINTER), pointer_style)]
+        } else {
+            vec![Span::raw("  ")]
+        };
+        spans.extend(render_input_line_segments(
+            input, offset, line_end, cursor_pos, cursor, text_style, t,
+        ));
+        lines.push(Line::from(spans));
+        offset = line_end + 1;
+    }
+    if input.ends_with('\n') {
+        let prefix = vec![Span::raw("  ")];
+        let mut spans = prefix;
+        if cursor_pos == input.len() && !cursor.is_empty() {
+            spans.push(Span::raw(cursor.to_string()));
+        }
+        lines.push(Line::from(spans));
+    }
+    lines
+}
+
+fn render_input_line_segments(
+    input: &str,
+    start: usize,
+    end: usize,
+    cursor_pos: usize,
+    cursor: &str,
+    text_style: Style,
+    t: &Theme,
+) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut pos = start;
+    while pos < end {
+        if pos == cursor_pos && !cursor.is_empty() {
+            spans.push(Span::raw(cursor.to_string()));
+        }
+        if let Some((chip_end, selected)) = chip_segment_at(input, pos, cursor_pos) {
+            spans.push(Span::styled(
+                input[pos..chip_end].to_string(),
+                if selected {
+                    Style::default().fg(t.bg).bg(t.text)
+                } else {
+                    text_style
+                },
+            ));
+            pos = chip_end;
+            continue;
+        }
+        let next_chip = next_chip_start(input, pos, end);
+        let next_cursor = if cursor_pos > pos && cursor_pos < end {
+            cursor_pos
+        } else {
+            end
+        };
+        let boundary = next_chip.min(next_cursor).min(end);
+        if boundary > pos {
+            spans.push(Span::styled(input[pos..boundary].to_string(), text_style));
+        }
+        pos = boundary;
+    }
+    if cursor_pos == end && !cursor.is_empty() {
+        spans.push(Span::raw(cursor.to_string()));
+    }
+    spans
+}
+
+fn next_chip_start(input: &str, start: usize, end: usize) -> usize {
+    input[start..end]
+        .find('[')
+        .map(|idx| start + idx)
+        .unwrap_or(end)
+}
+
+fn chip_segment_at(input: &str, start: usize, cursor_pos: usize) -> Option<(usize, bool)> {
+    let after = &input[start..];
+    let close = after.find(']')?;
+    let candidate = &after[..=close];
+    if !is_render_chip(candidate) {
+        return None;
+    }
+    let end = start + candidate.len();
+    Some((end, cursor_pos == start || cursor_pos == end))
+}
+
+fn is_render_chip(s: &str) -> bool {
+    ((s.starts_with("[Pasted text #") || s.starts_with("[...Truncated text #"))
+        || s.starts_with("[Image #"))
+        && s.ends_with(']')
 }
 
 fn render_prompt_suggestions(frame: &mut Frame, app: &App, area: Rect, t: &Theme) {

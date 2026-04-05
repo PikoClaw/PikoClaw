@@ -1,6 +1,6 @@
 # Spec: Multi-Agent / Coordinator / Swarm
 
-**Status**: ❌ Todo (AgentTool exists for single sub-agents; coordinator and swarm not implemented)
+**Status**: 🔶 Partial — `AgentTool` single sub-agents exist; coordinator and swarm not implemented
 **TS source**: `coordinator/coordinatorMode.ts`, `tools/TeamCreateTool.tsx`, `tools/SendMessageTool.tsx`
 
 ---

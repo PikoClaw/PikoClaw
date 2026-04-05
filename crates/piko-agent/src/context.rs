@@ -25,6 +25,10 @@ impl ConversationContext {
         self.messages.push(Message::user(text));
     }
 
+    pub fn push_user_message(&mut self, message: Message) {
+        self.messages.push(message);
+    }
+
     pub fn push_assistant_text(&mut self, text: impl Into<String>) {
         self.messages.push(Message::assistant(text));
     }

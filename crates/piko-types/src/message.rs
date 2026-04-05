@@ -13,6 +13,9 @@ pub enum ContentBlock {
     Text {
         text: String,
     },
+    Image {
+        source: ImageSource,
+    },
     ToolUse {
         id: String,
         name: String,
@@ -40,6 +43,13 @@ pub enum ContentBlock {
     },
     #[serde(other)]
     Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ImageSource {
+    Base64 { media_type: String, data: String },
+    Url { url: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +83,13 @@ impl Message {
         Self {
             role: Role::Assistant,
             content: vec![ContentBlock::Text { text: text.into() }],
+        }
+    }
+
+    pub fn user_blocks(content: Vec<ContentBlock>) -> Self {
+        Self {
+            role: Role::User,
+            content,
         }
     }
 

@@ -5,7 +5,7 @@ use crate::stream::{
     parse_sse_line, Delta, DeltaUsage, EventStream, MessageDeltaData, MessageStartData, StreamEvent,
 };
 use futures_util::StreamExt;
-use piko_types::message::{ContentBlock, ToolResultContent};
+use piko_types::message::{ContentBlock, ImageSource, ToolResultContent};
 use piko_types::{Message, Role};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde_json::{json, Value};
@@ -511,10 +511,24 @@ fn to_openai_messages(
 
 fn append_user_message(out: &mut Vec<Value>, msg: &Message) {
     let mut text_parts = Vec::new();
+    let mut content_parts = Vec::new();
+    let mut has_rich_content = false;
 
     for block in &msg.content {
         match block {
-            ContentBlock::Text { text } => text_parts.push(text.clone()),
+            ContentBlock::Text { text } => {
+                text_parts.push(text.clone());
+                content_parts.push(json!({
+                    "type": "text",
+                    "text": text,
+                }));
+            }
+            ContentBlock::Image { source } => {
+                has_rich_content = true;
+                if let Some(part) = openai_image_part(source) {
+                    content_parts.push(part);
+                }
+            }
             ContentBlock::ToolResult {
                 tool_use_id,
                 content,
@@ -541,11 +555,35 @@ fn append_user_message(out: &mut Vec<Value>, msg: &Message) {
         }
     }
 
-    if !text_parts.is_empty() {
+    if has_rich_content {
+        if !content_parts.is_empty() {
+            out.push(json!({
+                "role": "user",
+                "content": content_parts,
+            }));
+        }
+    } else if !text_parts.is_empty() {
         out.push(json!({
             "role": "user",
             "content": text_parts.join(""),
         }));
+    }
+}
+
+fn openai_image_part(source: &ImageSource) -> Option<Value> {
+    match source {
+        ImageSource::Base64 { media_type, data } => Some(json!({
+            "type": "image_url",
+            "image_url": {
+                "url": format!("data:{};base64,{}", media_type, data),
+            }
+        })),
+        ImageSource::Url { url } => Some(json!({
+            "type": "image_url",
+            "image_url": {
+                "url": url,
+            }
+        })),
     }
 }
 

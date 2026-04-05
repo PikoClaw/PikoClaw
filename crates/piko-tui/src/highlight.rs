@@ -192,110 +192,6 @@ pub fn highlight_code(
     lines
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ratatui::style::Color;
-
-    fn plain_style() -> Style {
-        Style::default().fg(Color::White)
-    }
-
-    fn code_style() -> Style {
-        Style::default().fg(Color::Blue)
-    }
-
-    fn text(spans: &[Span]) -> String {
-        spans.iter().map(|s| s.content.as_ref()).collect()
-    }
-
-    #[test]
-    fn plain_text_unchanged() {
-        let spans = parse_inline_spans("hello world", plain_style(), code_style());
-        assert_eq!(text(&spans), "hello world");
-        assert_eq!(spans.len(), 1);
-    }
-
-    #[test]
-    fn inline_code_single() {
-        let spans = parse_inline_spans("`foo`", plain_style(), code_style());
-        assert_eq!(text(&spans), "foo");
-        assert_eq!(spans[0].style.fg, Some(Color::Blue));
-    }
-
-    #[test]
-    fn inline_code_surrounded() {
-        let spans = parse_inline_spans("call `foo` now", plain_style(), code_style());
-        assert_eq!(text(&spans), "call foo now");
-        assert_eq!(spans[0].content.as_ref(), "call ");
-        assert_eq!(spans[1].style.fg, Some(Color::Blue));
-        assert_eq!(spans[1].content.as_ref(), "foo");
-        assert_eq!(spans[2].content.as_ref(), " now");
-    }
-
-    #[test]
-    fn bold_text() {
-        let spans = parse_inline_spans("**bold**", plain_style(), code_style());
-        assert_eq!(text(&spans), "bold");
-        assert!(spans[0].style.add_modifier.contains(Modifier::BOLD));
-    }
-
-    #[test]
-    fn italic_star() {
-        let spans = parse_inline_spans("*italic*", plain_style(), code_style());
-        assert_eq!(text(&spans), "italic");
-        assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
-    }
-
-    #[test]
-    fn italic_underscore() {
-        let spans = parse_inline_spans("_italic_", plain_style(), code_style());
-        assert_eq!(text(&spans), "italic");
-        assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
-    }
-
-    #[test]
-    fn mixed_inline() {
-        let spans = parse_inline_spans("use `foo` and **bar**", plain_style(), code_style());
-        assert_eq!(text(&spans), "use foo and bar");
-    }
-
-    #[test]
-    fn unclosed_backtick_treated_as_plain() {
-        let spans = parse_inline_spans("`unclosed", plain_style(), code_style());
-        assert_eq!(text(&spans), "`unclosed");
-    }
-
-    #[test]
-    fn empty_string() {
-        let spans = parse_inline_spans("", plain_style(), code_style());
-        assert!(spans.is_empty());
-    }
-
-    #[test]
-    fn parse_segments_plain() {
-        let segs = parse_segments("hello world");
-        assert_eq!(segs.len(), 1);
-        assert!(matches!(segs[0], Segment::Text("hello world")));
-    }
-
-    #[test]
-    fn parse_segments_code_block() {
-        let input = "text\n```rust\nfn main() {}\n```\nafter";
-        let segs = parse_segments(input);
-        assert_eq!(segs.len(), 3);
-        assert!(matches!(segs[0], Segment::Text(_)));
-        assert!(matches!(segs[1], Segment::Code { lang: "rust", .. }));
-        assert!(matches!(segs[2], Segment::Text(_)));
-    }
-
-    #[test]
-    fn parse_segments_no_code() {
-        let segs = parse_segments("no code here");
-        assert_eq!(segs.len(), 1);
-    }
-}
-
 /// Convert a syntect `Color` (RGBA) to a ratatui `Color`.
 fn syntect_color_to_ratatui(c: syntect::highlighting::Color) -> Color {
     // syntect uses (r, g, b, a) — a=0 means "use terminal default"
@@ -402,4 +298,108 @@ pub fn parse_inline_spans(text: &str, text_style: Style, code_style: Style) -> V
     }
 
     spans
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Color;
+
+    fn plain_style() -> Style {
+        Style::default().fg(Color::White)
+    }
+
+    fn code_style() -> Style {
+        Style::default().fg(Color::Blue)
+    }
+
+    fn text(spans: &[Span]) -> String {
+        spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn plain_text_unchanged() {
+        let spans = parse_inline_spans("hello world", plain_style(), code_style());
+        assert_eq!(text(&spans), "hello world");
+        assert_eq!(spans.len(), 1);
+    }
+
+    #[test]
+    fn inline_code_single() {
+        let spans = parse_inline_spans("`foo`", plain_style(), code_style());
+        assert_eq!(text(&spans), "foo");
+        assert_eq!(spans[0].style.fg, Some(Color::Blue));
+    }
+
+    #[test]
+    fn inline_code_surrounded() {
+        let spans = parse_inline_spans("call `foo` now", plain_style(), code_style());
+        assert_eq!(text(&spans), "call foo now");
+        assert_eq!(spans[0].content.as_ref(), "call ");
+        assert_eq!(spans[1].style.fg, Some(Color::Blue));
+        assert_eq!(spans[1].content.as_ref(), "foo");
+        assert_eq!(spans[2].content.as_ref(), " now");
+    }
+
+    #[test]
+    fn bold_text() {
+        let spans = parse_inline_spans("**bold**", plain_style(), code_style());
+        assert_eq!(text(&spans), "bold");
+        assert!(spans[0].style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn italic_star() {
+        let spans = parse_inline_spans("*italic*", plain_style(), code_style());
+        assert_eq!(text(&spans), "italic");
+        assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn italic_underscore() {
+        let spans = parse_inline_spans("_italic_", plain_style(), code_style());
+        assert_eq!(text(&spans), "italic");
+        assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    #[test]
+    fn mixed_inline() {
+        let spans = parse_inline_spans("use `foo` and **bar**", plain_style(), code_style());
+        assert_eq!(text(&spans), "use foo and bar");
+    }
+
+    #[test]
+    fn unclosed_backtick_treated_as_plain() {
+        let spans = parse_inline_spans("`unclosed", plain_style(), code_style());
+        assert_eq!(text(&spans), "`unclosed");
+    }
+
+    #[test]
+    fn empty_string() {
+        let spans = parse_inline_spans("", plain_style(), code_style());
+        assert!(spans.is_empty());
+    }
+
+    #[test]
+    fn parse_segments_plain() {
+        let segs = parse_segments("hello world");
+        assert_eq!(segs.len(), 1);
+        assert!(matches!(segs[0], Segment::Text("hello world")));
+    }
+
+    #[test]
+    fn parse_segments_code_block() {
+        let input = "text\n```rust\nfn main() {}\n```\nafter";
+        let segs = parse_segments(input);
+        assert_eq!(segs.len(), 3);
+        assert!(matches!(segs[0], Segment::Text(_)));
+        assert!(matches!(segs[1], Segment::Code { lang: "rust", .. }));
+        assert!(matches!(segs[2], Segment::Text(_)));
+    }
+
+    #[test]
+    fn parse_segments_no_code() {
+        let segs = parse_segments("no code here");
+        assert_eq!(segs.len(), 1);
+    }
 }

@@ -1,5 +1,8 @@
 use crate::events::{AppEvent, PermissionPrompt, QuestionPrompt};
 use crate::history::InputHistory;
+use crate::image_paste::{
+    encode_image_base64, read_clipboard_image, read_clipboard_text, PastedImage,
+};
 use crate::slash_menu::{compute_typeahead, TypeaheadSuggestion};
 use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
@@ -23,6 +26,7 @@ use piko_permissions::policy::PermissionPolicy;
 use piko_skills::dispatcher::{DispatchResult, SkillDispatcher};
 use piko_tools::ask_user::{AskQuestion, AskUserQuestionTool};
 use piko_tools::plan_mode::{EnterPlanModeTool, ExitPlanModeTool, PlanModeExitRequest};
+use piko_types::message::{ContentBlock, ImageSource, Message};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::collections::HashMap;
@@ -92,8 +96,10 @@ pub struct App {
     pub history: InputHistory,
     /// Stored paste content for chips: id → full text.
     pub paste_store: HashMap<u32, String>,
+    pub image_store: HashMap<u32, PastedImage>,
     /// Auto-incrementing counter for paste chip IDs.
     pub paste_counter: u32,
+    pub image_counter: u32,
     pub plan_mode: Arc<AtomicBool>,
     pub plan_mode_exit_rx: mpsc::UnboundedReceiver<PlanModeExitRequest>,
     pub pending_plan_mode_exit: Option<oneshot::Sender<bool>>,
@@ -255,7 +261,9 @@ impl App {
             rate_limit_until: None,
             history: InputHistory::new(),
             paste_store: HashMap::new(),
+            image_store: HashMap::new(),
             paste_counter: 0,
+            image_counter: 0,
             plan_mode,
             plan_mode_exit_rx,
             pending_plan_mode_exit: None,
@@ -447,7 +455,7 @@ impl App {
                 }
                 KeyCode::Enter => {
                     if let Some(dialog) = self.api_key_dialog.take() {
-                        self.apply_provider_connection(dialog)?;
+                        self.apply_provider_connection(dialog).await?;
                     }
                 }
                 KeyCode::Char(c) => {
@@ -502,6 +510,12 @@ impl App {
         }
 
         match (key.code, key.modifiers) {
+            (KeyCode::Char('v'), mods) if is_paste_shortcut(mods) => {
+                self.handle_clipboard_shortcut();
+            }
+            (KeyCode::Insert, mods) if mods.contains(KeyModifiers::SHIFT) => {
+                self.handle_clipboard_shortcut();
+            }
             (KeyCode::Char('c'), KeyModifiers::CONTROL)
             | (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
                 self.state = AppState::Exiting;
@@ -529,11 +543,32 @@ impl App {
             }
             (KeyCode::Backspace, _) => {
                 if self.cursor_pos > 0 {
-                    if self.input[..self.cursor_pos].ends_with(']') {
-                        if let Some(chip_start) = self.find_chip_start(self.cursor_pos) {
+                    if let Some((chip_end, chip_kind)) = self.find_chip_end(self.cursor_pos) {
+                        let chip = self.input[self.cursor_pos..chip_end].to_owned();
+                        if let Some(id) = parse_chip_id(&chip) {
+                            match chip_kind {
+                                ChipKind::Paste => {
+                                    self.paste_store.remove(&id);
+                                }
+                                ChipKind::Image => {
+                                    self.image_store.remove(&id);
+                                }
+                            }
+                        }
+                        self.input.drain(self.cursor_pos..chip_end);
+                    } else if self.input[..self.cursor_pos].ends_with(']') {
+                        if let Some((chip_start, chip_kind)) = self.find_chip_start(self.cursor_pos)
+                        {
                             let chip = self.input[chip_start..self.cursor_pos].to_owned();
                             if let Some(id) = parse_chip_id(&chip) {
-                                self.paste_store.remove(&id);
+                                match chip_kind {
+                                    ChipKind::Paste => {
+                                        self.paste_store.remove(&id);
+                                    }
+                                    ChipKind::Image => {
+                                        self.image_store.remove(&id);
+                                    }
+                                }
                             }
                             self.input.drain(chip_start..self.cursor_pos);
                             self.cursor_pos = chip_start;
@@ -756,22 +791,24 @@ impl App {
                 ..
             } => {
                 self.paste_store.clear();
-                self.run_agent_turn(prompt.clone(), prompt).await?;
+                self.run_agent_turn(prompt.clone(), Message::user(prompt))
+                    .await?;
             }
             DispatchResult::NotACommand
             | DispatchResult::Skill {
                 rendered_prompt: None,
                 ..
             } => {
-                let api_input = self.expand_chips(&input);
+                let api_message = self.build_user_message(&input)?;
                 self.paste_store.clear();
-                self.run_agent_turn(input, api_input).await?;
+                self.image_store.clear();
+                self.run_agent_turn(input, api_message).await?;
             }
         }
         Ok(())
     }
 
-    fn apply_provider_connection(&mut self, dialog: ApiKeyDialogState) -> Result<()> {
+    async fn apply_provider_connection(&mut self, dialog: ApiKeyDialogState) -> Result<()> {
         let key = dialog.input.trim().to_string();
         if key.is_empty() {
             self.messages.push(ChatMessage {
@@ -807,7 +844,7 @@ impl App {
 
         save_config(&config)?;
 
-        let mut agent = self.agent.blocking_lock();
+        let mut agent = self.agent.lock().await;
         agent.client = Arc::new(AnthropicClient::with_options(
             key,
             config.api.base_url.clone(),
@@ -954,7 +991,11 @@ impl App {
         }
     }
 
-    async fn run_agent_turn(&mut self, display_content: String, api_content: String) -> Result<()> {
+    async fn run_agent_turn(
+        &mut self,
+        display_content: String,
+        api_message: Message,
+    ) -> Result<()> {
         self.messages.push(ChatMessage {
             role: MessageRole::User,
             content: display_content,
@@ -968,7 +1009,7 @@ impl App {
         let sink: Arc<dyn OutputSink> = Arc::new(TuiSink { tx: tx.clone() });
         let agent = Arc::clone(&self.agent);
         tokio::spawn(async move {
-            let result = agent.lock().await.run_turn(&api_content, sink).await;
+            let result = agent.lock().await.run_turn_message(api_message, sink).await;
             if let Err(e) = result {
                 let _ = tx.send(AppEvent::Agent(AgentEvent::Error(e.to_string())));
             }
@@ -978,8 +1019,41 @@ impl App {
         Ok(())
     }
 
-    fn handle_paste(&mut self, text: String) {
+    fn handle_clipboard_shortcut(&mut self) {
+        if self.state == AppState::EnteringApiKey {
+            if let Some(text) = read_clipboard_text() {
+                if let Some(dialog) = self.api_key_dialog.as_mut() {
+                    dialog.input.push_str(&normalize_single_line_paste(&text));
+                }
+            }
+            return;
+        }
         if self.state != AppState::Running {
+            return;
+        }
+        if let Some(image) = read_clipboard_image() {
+            self.insert_image_chip(image);
+            self.refresh_slash_suggestions();
+            return;
+        }
+        if let Some(text) = read_clipboard_text() {
+            self.handle_paste(text);
+        }
+    }
+
+    fn handle_paste(&mut self, text: String) {
+        if self.state == AppState::EnteringApiKey {
+            if let Some(dialog) = self.api_key_dialog.as_mut() {
+                dialog.input.push_str(&normalize_single_line_paste(&text));
+            }
+            return;
+        }
+        if self.state != AppState::Running {
+            return;
+        }
+        if let Some(image) = pasted_image_from_text_path(&text) {
+            self.insert_image_chip(image);
+            self.refresh_slash_suggestions();
             return;
         }
         // Normalize: \r → \n, tabs → 4 spaces (matches Claude Code behaviour)
@@ -1004,6 +1078,70 @@ impl App {
             self.cursor_pos += chip.len();
         }
         self.refresh_slash_suggestions();
+    }
+
+    fn insert_image_chip(&mut self, image: PastedImage) {
+        self.image_counter += 1;
+        let id = self.image_counter;
+        let chip = format!("[Image #{}]", id);
+        self.image_store.insert(id, image);
+        self.input.insert_str(self.cursor_pos, &chip);
+        self.cursor_pos += chip.len();
+        if self
+            .input
+            .get(self.cursor_pos..)
+            .and_then(|s| s.chars().next())
+            .is_some_and(|c| !c.is_whitespace())
+        {
+            self.input.insert(self.cursor_pos, ' ');
+            self.cursor_pos += 1;
+        }
+    }
+
+    fn build_user_message(&self, text: &str) -> Result<Message> {
+        if !text.contains("[Image #") && !text.contains('@') {
+            return Ok(Message::user(self.expand_chips(text)));
+        }
+        let mut blocks = Vec::new();
+        let mut current_text = String::new();
+        let mut rest = text;
+
+        while !rest.is_empty() {
+            if let Some((chip_len, image_block)) = self.try_expand_image_chip_at(rest)? {
+                if !current_text.is_empty() {
+                    blocks.push(ContentBlock::Text {
+                        text: std::mem::take(&mut current_text),
+                    });
+                }
+                blocks.push(image_block);
+                rest = &rest[chip_len..];
+                continue;
+            }
+            if let Some((chip_len, content)) = self.try_expand_chip_at(rest) {
+                current_text.push_str(&content);
+                rest = &rest[chip_len..];
+                continue;
+            }
+            if let Some((token_len, image_block)) = try_parse_image_path_reference(rest)? {
+                if !current_text.is_empty() {
+                    blocks.push(ContentBlock::Text {
+                        text: std::mem::take(&mut current_text),
+                    });
+                }
+                blocks.push(image_block);
+                rest = &rest[token_len..];
+                continue;
+            }
+            let ch = rest.chars().next().unwrap_or_default();
+            current_text.push(ch);
+            rest = &rest[ch.len_utf8()..];
+        }
+
+        if !current_text.is_empty() {
+            blocks.push(ContentBlock::Text { text: current_text });
+        }
+
+        Ok(Message::user_blocks(blocks))
     }
 
     fn expand_chips(&self, text: &str) -> String {
@@ -1042,12 +1180,47 @@ impl App {
         Some((chip.len(), content))
     }
 
-    fn find_chip_start(&self, end_pos: usize) -> Option<usize> {
+    fn try_expand_image_chip_at(&self, s: &str) -> Result<Option<(usize, ContentBlock)>> {
+        let close = match s.find(']') {
+            Some(close) => close,
+            None => return Ok(None),
+        };
+        let chip = &s[..=close];
+        if !is_image_chip(chip) {
+            return Ok(None);
+        }
+        let id = match parse_chip_id(chip) {
+            Some(id) => id,
+            None => return Ok(None),
+        };
+        let image = match self.image_store.get(&id) {
+            Some(image) => image,
+            None => return Ok(None),
+        };
+        Ok(Some((chip.len(), load_image_block(&image.path)?)))
+    }
+
+    fn find_chip_start(&self, end_pos: usize) -> Option<(usize, ChipKind)> {
         let before = &self.input[..end_pos];
         let bracket_pos = before.rfind('[')?;
         let candidate = &self.input[bracket_pos..end_pos];
         if is_paste_chip(candidate) {
-            Some(bracket_pos)
+            Some((bracket_pos, ChipKind::Paste))
+        } else if is_image_chip(candidate) {
+            Some((bracket_pos, ChipKind::Image))
+        } else {
+            None
+        }
+    }
+
+    fn find_chip_end(&self, start_pos: usize) -> Option<(usize, ChipKind)> {
+        let after = &self.input[start_pos..];
+        let close = after.find(']')?;
+        let candidate = &after[..=close];
+        if is_paste_chip(candidate) {
+            Some((start_pos + candidate.len(), ChipKind::Paste))
+        } else if is_image_chip(candidate) {
+            Some((start_pos + candidate.len(), ChipKind::Image))
         } else {
             None
         }
@@ -1175,8 +1348,131 @@ impl App {
     }
 }
 
+fn normalize_single_line_paste(text: &str) -> String {
+    text.replace(['\r', '\n'], "").trim().to_string()
+}
+
+fn pasted_image_from_text_path(text: &str) -> Option<PastedImage> {
+    let candidate = normalize_single_line_paste(text);
+    if candidate.is_empty() {
+        return None;
+    }
+    let raw = candidate
+        .strip_prefix("file://")
+        .unwrap_or(&candidate)
+        .trim_matches('"')
+        .trim_matches('\'')
+        .replace("\\ ", " ");
+    let path = std::path::PathBuf::from(raw);
+    if !path.exists() || !is_supported_image_path(&path) {
+        return None;
+    }
+    let label = path.file_name()?.to_string_lossy().into_owned();
+    Some(PastedImage {
+        path,
+        label,
+        dimensions: None,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChipKind {
+    Paste,
+    Image,
+}
+
 fn is_paste_chip(s: &str) -> bool {
     (s.starts_with("[Pasted text #") || s.starts_with("[...Truncated text #")) && s.ends_with(']')
+}
+
+fn is_image_chip(s: &str) -> bool {
+    s.starts_with("[Image #") && s.ends_with(']')
+}
+
+fn is_paste_shortcut(mods: crossterm::event::KeyModifiers) -> bool {
+    mods.contains(crossterm::event::KeyModifiers::CONTROL)
+        || mods.contains(crossterm::event::KeyModifiers::SUPER)
+}
+
+fn try_parse_image_path_reference(s: &str) -> Result<Option<(usize, ContentBlock)>> {
+    if !s.starts_with('@') {
+        return Ok(None);
+    }
+    let token_len = s.find(char::is_whitespace).unwrap_or(s.len());
+    let raw = &s[1..token_len];
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let path = std::path::Path::new(raw);
+    if !path.exists() || !is_supported_image_path(path) {
+        return Ok(None);
+    }
+    Ok(Some((token_len, load_image_block(path)?)))
+}
+
+fn is_supported_image_path(path: &std::path::Path) -> bool {
+    if media_type_for_path(path).is_some() {
+        return true;
+    }
+    media_type_from_bytes(path).is_some()
+}
+
+fn media_type_from_bytes(path: &std::path::Path) -> Option<&'static str> {
+    let data = std::fs::read(path).ok()?;
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some("image/png");
+    }
+    if data.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("image/jpeg");
+    }
+    if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    None
+}
+
+fn media_type_for_path(path: &std::path::Path) -> Option<&'static str> {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp"
+            )
+        })
+        .and_then(|supported| if supported { path.extension().and_then(|ext| ext.to_str()) } else { None })
+        .and_then(|ext| match ext.to_ascii_lowercase().as_str() {
+            "png" => Some("image/png"),
+            "jpg" | "jpeg" => Some("image/jpeg"),
+            "gif" => Some("image/gif"),
+            "webp" => Some("image/webp"),
+            _ => None,
+        })
+}
+
+fn load_image_block(path: &std::path::Path) -> Result<ContentBlock> {
+    let media_type = media_type_for_path(path)
+        .or_else(|| media_type_from_bytes(path))
+        .ok_or_else(|| anyhow::anyhow!("Unsupported image type: {}", path.display()))?;
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() > 5 * 1024 * 1024 {
+        return Err(anyhow::anyhow!(
+            "Image too large (max 5MB): {}",
+            path.display()
+        ));
+    }
+    let path_buf = path.to_path_buf();
+    let data = encode_image_base64(&path_buf)
+        .ok_or_else(|| anyhow::anyhow!("Failed to encode image: {}", path.display()))?;
+    Ok(ContentBlock::Image {
+        source: ImageSource::Base64 {
+            media_type: media_type.to_string(),
+            data,
+        },
+    })
 }
 
 // ── Tool call display helpers ─────────────────────────────────────────────────
@@ -1428,6 +1724,7 @@ fn parse_chip_id(chip: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     // ── is_paste_chip ──────────────────────────────────────────────────────────
 
@@ -1527,11 +1824,87 @@ mod tests {
     }
 
     #[test]
+    fn api_key_paste_normalizes_newlines() {
+        assert_eq!(
+            normalize_single_line_paste("  sk-test-123\r\n"),
+            "sk-test-123"
+        );
+        assert_eq!(
+            normalize_single_line_paste("line1\nline2\rline3"),
+            "line1line2line3"
+        );
+    }
+
+    #[test]
     fn chip_not_triggered_two_lines() {
         let two_lines = "hello\nworld";
         let newlines = two_lines.chars().filter(|&c| c == '\n').count();
         assert!(two_lines.len() <= PASTE_INLINE_THRESHOLD);
         assert!(newlines <= PASTE_MAX_INLINE_LINES, "should be inlined");
+    }
+
+    #[test]
+    fn pasted_image_from_text_path_detects_local_image_file() {
+        let path = std::env::temp_dir().join(format!(
+            "pikoclaw-image-path-test-{}.png",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            [
+                0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, b'I',
+                b'H', b'D', b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+                0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, b'I', b'D',
+                b'A', b'T', 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01,
+                0x00, 0xc9, 0xfe, 0x92, 0xef, 0x00, 0x00, 0x00, 0x00, b'I', b'E', b'N', b'D',
+                0xae, 0x42, 0x60, 0x82,
+            ],
+        )
+        .unwrap();
+
+        let image = pasted_image_from_text_path(&path.display().to_string()).unwrap();
+        assert_eq!(image.path, path);
+        assert_eq!(image.label, path.file_name().unwrap().to_string_lossy());
+
+        let _ = std::fs::remove_file(image.path);
+    }
+
+    #[test]
+    fn pasted_image_from_text_path_handles_spaces_and_quotes() {
+        let path = std::env::temp_dir().join(format!(
+            "pikoclaw image path test {}.png",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::write(
+            &path,
+            [
+                0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, b'I',
+                b'H', b'D', b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+                0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, b'I', b'D',
+                b'A', b'T', 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01,
+                0x00, 0xc9, 0xfe, 0x92, 0xef, 0x00, 0x00, 0x00, 0x00, b'I', b'E', b'N', b'D',
+                0xae, 0x42, 0x60, 0x82,
+            ],
+        )
+        .unwrap();
+
+        let quoted = format!("\"{}\"", path.display());
+        let image = pasted_image_from_text_path(&quoted).unwrap();
+        assert_eq!(image.path, path);
+
+        let _ = std::fs::remove_file(image.path);
+    }
+
+    #[test]
+    fn pasted_image_from_text_path_ignores_regular_text() {
+        assert!(pasted_image_from_text_path("hello world").is_none());
+        assert!(pasted_image_from_text_path("/tmp/not-an-image.txt").is_none());
     }
 
     #[test]

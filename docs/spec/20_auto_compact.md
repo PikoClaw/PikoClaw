@@ -1,6 +1,6 @@
 # Spec: Auto-Compact / Context Summarization
 
-**Status**: ❌ Todo (manual `/compact` slash command exists; auto-trigger missing)
+**Status**: 🔶 Partial — manual `/compact` slash command exists; auto-trigger missing
 **TS source**: `services/compact/`, `commands/compact.ts`
 
 ---

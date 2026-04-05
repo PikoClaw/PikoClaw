@@ -26,3 +26,4 @@ piko-permissions.workspace = true
 piko-tools.workspace = true
 async-trait.workspace = true
 syntect.workspace = true
+base64.workspace = true

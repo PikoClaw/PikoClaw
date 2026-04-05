@@ -10,6 +10,7 @@ use piko_permissions::policy::PermissionPolicy;
 use piko_session::session::Session;
 use piko_session::store::SessionStore;
 use piko_tools::registry::ToolRegistry;
+use piko_types::message::Message;
 use piko_types::model::ModelId;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -148,7 +149,19 @@ impl Agent {
 
     pub async fn run_turn(&mut self, prompt: &str, sink: Arc<dyn OutputSink>) -> Result<String> {
         self.context.push_user(prompt);
+        self.run_turn_from_context(sink).await
+    }
 
+    pub async fn run_turn_message(
+        &mut self,
+        message: Message,
+        sink: Arc<dyn OutputSink>,
+    ) -> Result<String> {
+        self.context.push_user_message(message);
+        self.run_turn_from_context(sink).await
+    }
+
+    async fn run_turn_from_context(&mut self, sink: Arc<dyn OutputSink>) -> Result<String> {
         let result = run_turn(
             &self.client,
             &self.tools,

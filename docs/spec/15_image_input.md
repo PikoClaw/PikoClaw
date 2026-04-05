@@ -1,6 +1,6 @@
 # Spec: Image & Screenshot Input
 
-**Status**: ❌ Todo
+**Status**: 🔶 Partial — clipboard image paste and direct image path references implemented; screenshot capture and full @file autocomplete still missing
 **TS source**: `hooks/useClipboardImageHint.ts`, `utils/attachments.ts`
 
 ---

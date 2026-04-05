@@ -2,6 +2,7 @@ pub mod app;
 pub mod events;
 pub mod highlight;
 pub mod history;
+pub mod image_paste;
 pub mod input;
 pub mod onboarding;
 pub mod render;
