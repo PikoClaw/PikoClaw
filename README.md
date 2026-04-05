@@ -10,6 +10,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue.svg)](#install)
 [![Ultra Lightweight](https://img.shields.io/badge/ultra-lightweight-brightgreen.svg)](#)
 [![Speed](https://img.shields.io/badge/speed-blazing%20fast-red.svg)](#)
+![GitHub Downloads](https://img.shields.io/github/downloads/pikoclaw/pikoclaw/total)
 
 </div>
 
