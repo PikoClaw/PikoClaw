@@ -75,6 +75,18 @@ impl SkillDispatcher {
 
         DispatchResult::NotACommand
     }
+
+    pub fn slash_commands(&self) -> Vec<(String, String)> {
+        let mut commands: Vec<(String, String)> = self
+            .registry
+            .list()
+            .into_iter()
+            .map(|skill| (skill.name.clone(), skill.description.clone()))
+            .collect();
+        commands.sort_by(|a, b| a.0.cmp(&b.0));
+        commands.dedup_by(|a, b| a.0 == b.0);
+        commands
+    }
 }
 
 #[cfg(test)]

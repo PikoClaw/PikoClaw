@@ -1,5 +1,6 @@
 use crate::app::{App, AppState, ChatMessage, MessageRole};
 use crate::highlight::{highlight_code, parse_inline_spans, parse_segments, Segment};
+use crate::slash_menu::TypeaheadSource;
 use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -17,6 +18,17 @@ const SPINNER_CYCLE: &[&str] = &["·", "✢", "✳", "✶", "✻", "✽", "✻",
 // ── Figures (matching constants/figures.ts) ───────────────────────────────────
 const BLACK_CIRCLE: &str = "⏺"; // macOS variant (⏺ U+23FA)
 const POINTER: &str = "❯"; // figures.pointer
+
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    if max_chars <= 1 {
+        return "…".to_string();
+    }
+    let truncated: String = text.chars().take(max_chars - 1).collect();
+    format!("{truncated}…")
+}
 
 /// Compute how many terminal rows the input bar needs given the current text
 /// and terminal width.
@@ -59,12 +71,20 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Input bar height grows with the text so long lines wrap instead of clipping.
     let input_height = input_bar_height(&app.input, area.width);
 
+    let suggestions_height = if app.state == AppState::Running && !app.slash_suggestions.is_empty()
+    {
+        app.slash_suggestions.len().min(5) as u16
+    } else {
+        0
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
             Constraint::Length(1),
             Constraint::Length(input_height),
+            Constraint::Length(suggestions_height),
         ])
         .split(area);
 
@@ -87,7 +107,10 @@ pub fn render(frame: &mut Frame, app: &App) {
             render_input_bar(frame, app, chunks[2], t);
             render_api_key_dialog(frame, app, area, t);
         }
-        _ => render_input_bar(frame, app, chunks[2], t),
+        _ => {
+            render_input_bar(frame, app, chunks[2], t);
+            render_prompt_suggestions(frame, app, chunks[3], t);
+        }
     }
 }
 
@@ -102,8 +125,13 @@ fn render_messages(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t:
         .iter()
         .flat_map(|msg| message_to_lines(msg, t, area_width))
         .collect();
+    let all_lines = if all_lines.is_empty() {
+        vec![Line::from("")]
+    } else {
+        all_lines
+    };
 
-    let total = all_lines.len().max(1);
+    let total = all_lines.len();
     app.last_total_lines.set(total);
     app.last_frame_height.set(height);
 
@@ -864,6 +892,69 @@ fn render_input_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t
     );
 }
 
+fn render_prompt_suggestions(frame: &mut Frame, app: &App, area: Rect, t: &Theme) {
+    let suggestions = &app.slash_suggestions;
+    if suggestions.is_empty() || area.height == 0 {
+        return;
+    }
+
+    let selected = app.slash_suggestion_index.unwrap_or(0);
+    let max_visible = area.height as usize;
+    let start = selected
+        .saturating_sub(max_visible / 2)
+        .min(suggestions.len().saturating_sub(max_visible));
+    let end = (start + max_visible).min(suggestions.len());
+    let label_width = area.width.saturating_div(3).max(12) as usize;
+    let lines: Vec<Line> = suggestions[start..end]
+        .iter()
+        .enumerate()
+        .map(|(row, suggestion)| {
+            let is_selected = start + row == selected;
+            let accent_style = if is_selected {
+                Style::default().fg(t.claude).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.inactive)
+            };
+            let label_style = if is_selected {
+                Style::default().fg(t.claude).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text)
+            };
+            let detail_style = if is_selected {
+                Style::default().fg(t.claude)
+            } else {
+                Style::default().fg(t.inactive)
+            };
+            let mut spans = vec![Span::styled(
+                if is_selected { "› " } else { "  " },
+                accent_style,
+            )];
+            match suggestion.source {
+                TypeaheadSource::SlashCommand => {
+                    let display_name = truncate_text(&suggestion.text, label_width);
+                    spans.push(Span::styled(
+                        format!("{display_name:<width$}", width = label_width),
+                        label_style,
+                    ));
+                    spans.push(Span::styled(" [cmd] ", Style::default().fg(t.subtle)));
+                    if !suggestion.description.is_empty() {
+                        spans.push(Span::styled(
+                            truncate_text(
+                                &suggestion.description,
+                                area.width.saturating_sub(label_width as u16 + 10) as usize,
+                            ),
+                            detail_style,
+                        ));
+                    }
+                }
+            }
+            Line::from(spans)
+        })
+        .collect();
+
+    frame.render_widget(Paragraph::new(lines).style(Style::default().bg(t.bg)), area);
+}
+
 // ── Permission dialog ─────────────────────────────────────────────────────────
 
 fn render_permission_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
@@ -1021,12 +1112,10 @@ fn render_connect_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Re
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(t.permission))
+        .border_style(Style::default().fg(t.claude))
         .title(Span::styled(
             " Connect a Provider ",
-            Style::default()
-                .fg(t.permission)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
         ));
 
     let mut lines = vec![Line::from(Span::styled(
@@ -1038,17 +1127,17 @@ fn render_connect_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Re
         let selected = idx == app.connect_dialog.selected_index;
         let marker = if selected { "›" } else { " " };
         let name_style = if selected {
-            Style::default().fg(t.text).add_modifier(Modifier::BOLD)
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(t.text)
         };
         let desc_style = if selected {
-            Style::default().fg(t.permission)
+            Style::default().fg(t.claude)
         } else {
             Style::default().fg(t.inactive)
         };
         lines.push(Line::from(vec![
-            Span::styled(format!("{marker} "), Style::default().fg(t.permission)),
+            Span::styled(format!("{marker} "), Style::default().fg(t.claude)),
             Span::styled(option.label, name_style),
             Span::raw("  "),
             Span::styled(option.description, desc_style),

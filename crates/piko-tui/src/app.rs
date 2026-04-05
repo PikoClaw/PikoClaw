@@ -1,5 +1,6 @@
 use crate::events::{AppEvent, PermissionPrompt, QuestionPrompt};
 use crate::history::InputHistory;
+use crate::slash_menu::{compute_typeahead, TypeaheadSuggestion};
 use crate::theme::{self, Theme};
 use crate::tui_permissions::{PermissionAsk, TuiPermissionChecker};
 use anyhow::Result;
@@ -100,6 +101,8 @@ pub struct App {
     pub cwd_raw: String,
     pub connect_dialog: ConnectDialogState,
     pub api_key_dialog: Option<ApiKeyDialogState>,
+    pub slash_suggestions: Vec<TypeaheadSuggestion>,
+    pub slash_suggestion_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -278,6 +281,8 @@ impl App {
                 ],
             },
             api_key_dialog: None,
+            slash_suggestions: Vec::new(),
+            slash_suggestion_index: None,
         }
     }
 
@@ -504,11 +509,20 @@ impl App {
             (KeyCode::Enter, KeyModifiers::SHIFT) => {
                 self.input.insert(self.cursor_pos, '\n');
                 self.cursor_pos += 1;
+                self.refresh_slash_suggestions();
             }
             (KeyCode::Enter, _) if self.state == AppState::Running => {
+                if !self.slash_suggestions.is_empty()
+                    && self.slash_suggestion_index.is_some()
+                    && self.input.starts_with('/')
+                    && !self.input.contains(' ')
+                {
+                    self.accept_slash_suggestion();
+                }
                 let input = std::mem::take(&mut self.input);
                 self.cursor_pos = 0;
                 self.history.reset();
+                self.clear_slash_suggestions();
                 if !input.trim().is_empty() {
                     self.submit_input(input).await?;
                 }
@@ -532,6 +546,7 @@ impl App {
                         self.input.remove(self.cursor_pos);
                     }
                 }
+                self.refresh_slash_suggestions();
             }
             (KeyCode::Left, _) => {
                 if self.cursor_pos > 0 {
@@ -543,14 +558,23 @@ impl App {
                     self.cursor_pos += 1;
                 }
             }
+            (KeyCode::Tab, _) => {
+                if !self.slash_suggestions.is_empty() && self.input.starts_with('/') {
+                    self.accept_slash_suggestion();
+                }
+            }
             // ↑ — scroll viewport when agent is running; else navigate input history.
             (KeyCode::Up, _) => {
-                if self.state == AppState::WaitingForAgent {
+                if !self.slash_suggestions.is_empty() && self.input.starts_with('/') {
+                    let selected = self.slash_suggestion_index.unwrap_or(0);
+                    self.slash_suggestion_index = Some(selected.saturating_sub(1));
+                } else if self.state == AppState::WaitingForAgent {
                     self.scroll_up(1);
                 } else if self.input.is_empty() || self.history.is_navigating() {
                     if let Some(recalled) = self.history.backward() {
                         self.input = recalled.to_string();
                         self.cursor_pos = self.input.len();
+                        self.refresh_slash_suggestions();
                     } else {
                         self.scroll_up(1);
                     }
@@ -560,17 +584,23 @@ impl App {
             }
             // ↓ — scroll viewport when agent is running; else navigate history.
             (KeyCode::Down, _) => {
-                if self.state == AppState::WaitingForAgent {
+                if !self.slash_suggestions.is_empty() && self.input.starts_with('/') {
+                    let selected = self.slash_suggestion_index.unwrap_or(0);
+                    self.slash_suggestion_index =
+                        Some((selected + 1).min(self.slash_suggestions.len().saturating_sub(1)));
+                } else if self.state == AppState::WaitingForAgent {
                     self.scroll_down(1);
                 } else if self.history.is_navigating() {
                     match self.history.forward() {
                         Some(recalled) => {
                             self.input = recalled.to_string();
                             self.cursor_pos = self.input.len();
+                            self.refresh_slash_suggestions();
                         }
                         None => {
                             self.input.clear();
                             self.cursor_pos = 0;
+                            self.clear_slash_suggestions();
                         }
                     }
                 } else {
@@ -593,6 +623,7 @@ impl App {
                 }
                 self.input.insert(self.cursor_pos, c);
                 self.cursor_pos += 1;
+                self.refresh_slash_suggestions();
             }
             _ => {}
         }
@@ -893,6 +924,36 @@ impl App {
         });
     }
 
+    fn refresh_slash_suggestions(&mut self) {
+        let commands = self.dispatcher.slash_commands();
+        self.slash_suggestions = compute_typeahead(&self.input, &commands);
+        self.slash_suggestion_index = if self.slash_suggestions.is_empty() {
+            None
+        } else {
+            Some(
+                self.slash_suggestion_index
+                    .unwrap_or(0)
+                    .min(self.slash_suggestions.len().saturating_sub(1)),
+            )
+        };
+    }
+
+    fn clear_slash_suggestions(&mut self) {
+        self.slash_suggestions.clear();
+        self.slash_suggestion_index = None;
+    }
+
+    fn accept_slash_suggestion(&mut self) {
+        if let Some(selected) = self
+            .slash_suggestion_index
+            .and_then(|idx| self.slash_suggestions.get(idx))
+        {
+            self.input = selected.text.clone();
+            self.cursor_pos = self.input.len();
+            self.refresh_slash_suggestions();
+        }
+    }
+
     async fn run_agent_turn(&mut self, display_content: String, api_content: String) -> Result<()> {
         self.messages.push(ChatMessage {
             role: MessageRole::User,
@@ -942,6 +1003,7 @@ impl App {
             self.input.insert_str(self.cursor_pos, &chip);
             self.cursor_pos += chip.len();
         }
+        self.refresh_slash_suggestions();
     }
 
     fn expand_chips(&self, text: &str) -> String {

@@ -1,4 +1,4 @@
-# Spec: Anthropic API Client & Streaming
+# Spec: API Client & Streaming
 
 **Status**: ✅ Done
 **Rust crate**: `piko-api`
@@ -8,23 +8,27 @@
 
 ## Overview
 
-The API client handles all communication with the Anthropic Messages API, including SSE streaming, error classification, and retry logic.
+The API client handles provider-aware communication for Anthropic-compatible and OpenAI-compatible chat APIs, including SSE streaming, error classification, and retry logic.
 
 ---
 
 ## What's Implemented
 
-- [x] `AnthropicClient` struct with configurable base URL and API key
+- [x] `AnthropicClient` struct with configurable base URL, auth mode, and provider flavor
 - [x] `messages_stream()` — POST `/v1/messages` with `stream: true`, returns `EventStream`
+- [x] OpenAI-compatible path: POST `/v1/chat/completions`
 - [x] SSE line parsing (`parse_sse_line`) for `event:` / `data:` interleaving
 - [x] `StreamEvent` enum: `MessageStart`, `ContentBlockStart`, `ContentBlockDelta`, `ContentBlockStop`, `MessageDelta`, `MessageStop`, `Ping`, `Error`
 - [x] `MessagesRequest` — full request body: model, max_tokens, messages, system, tools, stream, betas
-- [x] Request headers: `anthropic-version: 2023-06-01`, `x-api-key`, `content-type`
+- [x] Request headers: `anthropic-version: 2023-06-01`, `x-api-key` or `Authorization: Bearer ...`, `content-type`
 - [x] Rate limit handling: 429 → extract `retry-after`, back off
 - [x] Overload handling: 529 → treat same as rate limit
 - [x] `ApiError` enum: `RateLimit`, `Overload`, `Auth`, `BadRequest`, `Server`, `Network`
 - [x] Beta header injection for experimental features (e.g. `web-search-20250305`)
 - [x] `MessagesResponse` and `StopReason` types
+- [x] Provider/model registry for Anthropic, OpenAI, and OpenRouter model inference
+- [x] OpenRouter support through the Anthropic-compatible path with bearer auth
+- [x] Trailing-slash-safe base URL normalization
 
 ---
 
@@ -67,11 +71,28 @@ event: message_stop
 ### Beta Headers (currently used)
 
 - `web-search-20250305` — enables native web search tool
-- `interleaved-thinking-2025-05-14` — extended thinking (not yet wired up in agent)
+- `interleaved-thinking-2025-05-14` — extended thinking
 - `prompt-caching-2024-07-31` — cache_control blocks (implicit, no header needed in newer API)
+
+### Provider Routing
+
+Current runtime behavior:
+
+- Anthropic: `/v1/messages` with `x-api-key`
+- OpenRouter: `/v1/messages` with `Authorization: Bearer ...`
+- OpenAI: `/v1/chat/completions` with `Authorization: Bearer ...`
+
+Related env/config support:
+
+- `ANTHROPIC_BASE_URL`
+- `ANTHROPIC_AUTH_TOKEN`
+- `ANTHROPIC_DEFAULT_SONNET_MODEL`
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENROUTER_API_KEY`
 
 ---
 
 ## Nothing To Do
 
-This crate is complete. Future work would only be adding new beta headers as Anthropic releases them.
+This crate is complete for the currently shipped provider set. Future work would only be adding more provider flavors or new beta headers.

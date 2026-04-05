@@ -1,6 +1,6 @@
 # Spec: Slash Commands & Skills System
 
-**Status**: 🔶 Partial — core built-ins done; many commands missing
+**Status**: 🔶 Partial — core built-ins, `/connect`, `/cost`, and `/plan` done; many advanced commands still missing
 **Rust crate**: `piko-skills`
 **TS source**: `commands/`, `skills/`
 
@@ -23,6 +23,11 @@ Slash commands are user-facing shortcuts dispatched from the input bar. Built-in
 | `/model <name>` | Switch active model mid-session |
 | `/compact` | Summarize conversation and replace with summary to reduce tokens |
 | `/theme [name]` | Cycle themes or set by name |
+| `/connect` | Open provider picker, collect API key, persist provider config |
+| `/cost` | Show session token/cost summary |
+| `/plan` | Toggle plan mode (read-only agent) |
+| `/exit` | Exit the app |
+| `/quit` | Exit the app |
 
 ### User-Defined Skills ✅
 - [x] Load from `~/.config/pikoclaw/skills/*.md`
@@ -31,6 +36,14 @@ Slash commands are user-facing shortcuts dispatched from the input bar. Built-in
 - [x] `SkillRegistry` — register + lookup by name
 - [x] `SkillDispatcher` — invoke skill, return `DispatchResult`
 - [x] Skills appear in `/help` output
+
+### Input UX ✅
+- [x] Slash-command detection when input starts with `/`
+- [x] Scrollable typeahead menu in the input area
+- [x] `↑` / `↓` navigation through suggestions
+- [x] `Tab` accepts the focused suggestion
+- [x] `Enter` accepts the focused suggestion and submits
+- [x] Suggestions display command description inline
 
 ---
 
@@ -71,7 +84,6 @@ Slash commands are user-facing shortcuts dispatched from the input bar. Built-in
 - `/mcp add <name> <command>` — add an MCP server dynamically
 
 ### Utility Commands ❌
-- `/cost` — show cumulative token cost in USD with per-token breakdown. See [31_cost_tracking.md](31_cost_tracking.md)
 - `/version` — show PikoClaw version, build date, and current model
 - `/status` — show connection status: API key valid, model, MCP server connection states
 - `/doctor` — run diagnostics: API key check, config file validity, MCP server connectivity, CLAUDE.md found/not-found
@@ -80,11 +92,14 @@ Slash commands are user-facing shortcuts dispatched from the input bar. Built-in
 - `/add-dir <path>` — add an additional working directory to file search context (multi-root projects)
 - `/diff` — show git diff of all changes made this session (runs `git diff HEAD`)
 
-### Plan Mode Commands ❌
-- `/plan` — toggle plan mode (read-only agent). See [17_plan_mode.md](17_plan_mode.md)
+### Connection Commands ❌
+- `/disconnect` — clear saved provider credentials
+- `/providers` — show configured provider, auth mode, and base URL
 
-### Vim Mode Commands ❌
+### Plan/Vim Commands ❌
 - `/vim` — toggle vim keybinding mode in input bar. See [14_vim_keybindings.md](14_vim_keybindings.md)
+
+`/plan` is implemented and handled directly in the TUI.
 
 ---
 

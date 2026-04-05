@@ -41,4 +41,44 @@ pub fn register_all(registry: &mut SkillRegistry) {
         prompt_template: String::new(),
         source: SkillSource::BuiltIn,
     });
+
+    registry.register(Skill {
+        name: "connect".to_string(),
+        description: "Connect a provider and save its API key".to_string(),
+        args: Vec::new(),
+        prompt_template: String::new(),
+        source: SkillSource::BuiltIn,
+    });
+
+    registry.register(Skill {
+        name: "cost".to_string(),
+        description: "Show the current session cost summary".to_string(),
+        args: Vec::new(),
+        prompt_template: String::new(),
+        source: SkillSource::BuiltIn,
+    });
+
+    registry.register(Skill {
+        name: "plan".to_string(),
+        description: "Toggle plan mode for read-only tool execution".to_string(),
+        args: Vec::new(),
+        prompt_template: String::new(),
+        source: SkillSource::BuiltIn,
+    });
+
+    registry.register(Skill {
+        name: "exit".to_string(),
+        description: "Exit the application".to_string(),
+        args: Vec::new(),
+        prompt_template: String::new(),
+        source: SkillSource::BuiltIn,
+    });
+
+    registry.register(Skill {
+        name: "quit".to_string(),
+        description: "Exit the application".to_string(),
+        args: Vec::new(),
+        prompt_template: String::new(),
+        source: SkillSource::BuiltIn,
+    });
 }

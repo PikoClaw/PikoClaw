@@ -7,24 +7,25 @@
 ## Visual Layout
 
 ```
-                                               [fast ⚡]
+╭──────────────────────────────────────────────────────╮
+│ ❯ Ask anything...                                   │
 ╰──────────────────────────────────────────────────────╯
-  > _
 ```
 
-- **Border**: bottom only, rounded corners (`╰──╯` style)
-- **Top-right label**: optional mode indicator (fast mode `⚡`, plan mode `📋`, bash mode `!`)
-- **Prompt symbol**: `>` followed by space, then cursor
-- **Background**: transparent (inherits terminal)
-- **Top margin**: 1 blank line above the border
+- **Border**: full rounded box
+- **Prompt symbol**: `❯` followed by space, then input text
+- **Cursor**: solid block `█` when input is editable
+- **Background**: theme background
+- **Suggestion list**: renders below the input box, not inside it
 
 ### Multi-line state
 
 ```
+╭──────────────────────────────────────────────────────╮
+│ ❯ First line of input                               │
+│   Second line (Shift+Enter was pressed)             │
+│   Third line█                                       │
 ╰──────────────────────────────────────────────────────╯
-  > First line of input
-    Second line (Shift+Enter was pressed)
-    Third line_
 ```
 
 Lines beyond the first have **2 spaces** indent (aligns with text after `> `).
@@ -35,15 +36,12 @@ Lines beyond the first have **2 spaces** indent (aligns with text after `> `).
 
 | State | Border color |
 |-------|-------------|
-| Default (idle) | `theme.inactive` (gray) |
-| Focused / typing | `theme.permission` (blue) |
-| Bash mode (`!` prefix) | `theme.bash_border` (hot pink `rgb(255,0,135)`) |
-| Plan mode active | `theme.plan_mode` (teal) |
-| Agent thinking | `theme.spinner` (blue, shimmer pulse) |
+| Default (idle / typing) | `theme.prompt_border` |
+| Slash-command suggestions visible | `theme.prompt_border` |
+| Agent thinking | `theme.subtle` |
+| Provider/API-key overlay visible | input remains in place; dialog uses `theme.claude` border |
 
-### Shimmer during agent thinking
-
-When the agent is processing, the border pulses between `theme.spinner` and `theme.spinner_shimmer` at 500ms intervals.
+There is no separate shimmer border state in the current Rust implementation.
 
 ---
 
@@ -54,9 +52,6 @@ Shown only when input is completely empty:
 | Context | Placeholder |
 |---------|------------|
 | Default | `Ask anything...` (dimmed, `theme.inactive`) |
-| After compact | `Context compacted. Continue...` |
-| In plan mode | `Describe your plan...` |
-| Agent waiting | `(agent is thinking...)` — not user-editable |
 
 ---
 
@@ -66,9 +61,7 @@ Certain characters at the start of input trigger special modes:
 
 | Prefix | Mode | Border color |
 |--------|------|-------------|
-| `!` | Bash shortcut — runs as shell command directly | Hot pink |
-| `/` | Slash command — dispatched to command system | Blue (default) |
-| `@` | File/mention — triggers file path autocomplete | Blue (default) |
+| `/` | Slash command — dispatched to command system with typeahead menu | `theme.prompt_border` |
 
 ---
 
@@ -77,41 +70,34 @@ Certain characters at the start of input trigger special modes:
 Appears **below** the input bar when suggestions are available.
 
 ```
-╰──────────────────────────────────────────────────────╯
-  > src/main@
-
-  ▶ src/main.rs           [rust]   Ctrl+→ to accept
-    src/main_test.rs      [rust]
-    src/main_helpers.rs   [rust]
+  › /connect              [cmd]   Connect a provider and save its API key
+    /compact              [cmd]   Summarize conversation history to reduce...
+    /cost                 [cmd]   Show the current session cost summary
 ```
 
 ### Dropdown layout
 
-- **Position**: Immediately below the input border, full width
-- **Max height**: `floor(terminal_rows / 2)` — never takes more than half the screen
+- **Position**: Immediately below the input box, full width
+- **Max height**: 5 rows
 - **Scroll**: If more items than fit, scrolls (no scrollbar, just clips)
 
 ### Item format
 
 ```
-  [indicator] filename.ext    [tag/lang]   shortcut hint
+  [indicator] /command-name   [cmd]   description
 ```
 
 - **Left indent**: 2 spaces
-- **Focused item**: inverted colors (white bg, dark text)
-- **Unfocused**: normal text
-- **Tag**: dimmed, right-aligned
-- **Shortcut hint**: `theme.inactive`, far right
+- **Focused item**: orange text (`theme.claude`) with bold command label
+- **Unfocused**: command name in `theme.text`, metadata/description in dim colors
+- **Tag**: dimmed ` [cmd] ` badge
+- **Description**: single-line truncated summary
 
 ### Suggestion types and their indicators
 
 | Type | Indicator | Color |
 |------|-----------|-------|
-| File path | ` ` (space) | default |
-| Directory | `/` suffix | default |
-| Slash command | `/` prefix | `theme.suggestion` blue |
-| Sub-agent @mention | `@` prefix | agent's team color |
-| Recent input | `↑` | `theme.inactive` |
+| Slash command | `› ` on focused row, otherwise two spaces | `theme.claude` when focused, `theme.inactive` otherwise |
 
 ### Keyboard navigation
 
@@ -120,35 +106,8 @@ Appears **below** the input bar when suggestions are available.
 | `↓` | Move focus down |
 | `↑` | Move focus up |
 | `Tab` | Accept focused suggestion |
-| `Ctrl+→` | Accept word from focused suggestion |
 | `Esc` | Dismiss dropdown |
 | `Enter` | Accept focused suggestion AND submit |
-
----
-
-## @file Mention Syntax
-
-When user types `@` followed by a path fragment, file suggestions appear.
-
-### Display in input text
-
-Accepted file paths appear as inline colored text (not a separate widget):
-- Color: `theme.suggestion` (blue)
-- No background, no border — just colored text in the input stream
-
-### With line range
-
-`@src/main.rs:10-25` — includes only lines 10–25 of the file in context.
-
-When submitted, the agent receives the file content inline in the user message:
-
-```
-[File: src/main.rs lines 10-25]
-```rust
-fn main() {
-    ...
-}
-```
 
 ---
 
@@ -205,6 +164,5 @@ Visual: input text replaces, cursor goes to end.
 | Limit | Value | Behavior |
 |-------|-------|----------|
 | Max visible input lines | ~10 | Input scrolls vertically |
-| Max paste inline | ~1024 chars | Larger becomes reference chip |
-| Max paste total | ~5000 chars | Beyond this, truncated chip shown |
+| Max paste inline | 800 bytes or 2 lines | Larger becomes reference chip |
 | Max input submit | No hard limit | Very large inputs may hit API limits |

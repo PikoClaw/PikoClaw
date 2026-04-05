@@ -9,7 +9,6 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Welcome header (first launch only)                         │
-├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  Chat pane (scrollable)                                     │
 │    [user message]                                           │
@@ -18,11 +17,10 @@
 │    [tool result]                                            │
 │    ...                                                      │
 │                                                             │
-├─────────────────────────────────────────────────────────────┤
+│  Status bar  model · cwd · tokens · cost                    │
 │  Input bar                                                  │
 │  > _                                                        │
-├─────────────────────────────────────────────────────────────┤
-│  Status bar  model · cwd · tokens · cost                    │
+│  Slash suggestions / dialogs                                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,9 +63,11 @@ PikoClaw uses ratatui's constraint-based layout, which maps to the Ink/Yoga flex
 - No blank line between a tool-use block and its result (they belong together)
 - **1 blank line** after a tool result before the next assistant text
 
-### Input bar
-- **1 blank line** margin above the input bar (separates chat from input)
-- No margin below (status bar is directly beneath)
+### Footer stack
+- Status bar is rendered above the input area
+- Input bar is rendered below the status bar
+- Slash suggestion list is rendered below the input bar
+- Provider/API-key dialogs overlay the footer stack without changing message-pane layout
 
 ### Inside message blocks
 - User message: **1 space** right padding inside its background box
@@ -87,7 +87,7 @@ PikoClaw uses ratatui's constraint-based layout, which maps to the Ink/Yoga flex
 // ratatui border styles used:
 Borders::NONE
 Borders::ALL         // full box
-Borders::BOTTOM      // underline only (input bar)
+Borders::BOTTOM      // underline only (historical design; current Rust input uses full rounded box)
 Borders::TOP         // overline only
 ```
 
@@ -134,7 +134,7 @@ Rendered bottom-to-top:
 2. Chat messages
 3. Input bar
 4. Status bar
-5. Suggestion dropdown (overlaps input area)
+5. Suggestion dropdown
 6. Permission dialog (modal, overlaps everything)
 7. Toast notifications (top layer)
 ```

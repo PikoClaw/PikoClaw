@@ -147,7 +147,21 @@ success       → blue instead of green
 error         → orange instead of red
 ```
 
-Exact values TBD — derive by running the standard red/green colors through a daltonization matrix and picking safe alternatives.
+Current Rust implementation uses:
+
+```text
+dark-daltonized:
+  claude      rgb(215,160,  0)
+  permission  rgb(100,180,255)
+  success     rgb(  0,160,220)
+  error       rgb(255,140,  0)
+
+light-daltonized:
+  claude      rgb(160,100,  0)
+  permission  rgb(  0,100,200)
+  success     rgb(  0,100,180)
+  error       rgb(180,100,  0)
+```
 
 ---
 
@@ -157,60 +171,21 @@ Exact values TBD — derive by running the standard red/green colors through a d
 // piko-tui/src/theme.rs
 
 pub struct Theme {
-    // Brand
+    pub name: &'static str,
+    pub label: &'static str,
     pub claude: Color,
-    pub claude_shimmer: Color,
-
-    // Interactive
     pub permission: Color,
-    pub permission_shimmer: Color,
-    pub suggestion: Color,
-
-    // Mode borders
-    pub bash_border: Color,
-    pub plan_mode: Color,
-
-    // Text
+    pub prompt_border: Color,
     pub text: Color,
-    pub inverse_text: Color,
     pub inactive: Color,
     pub subtle: Color,
-
-    // Status
     pub success: Color,
     pub error: Color,
     pub warning: Color,
-
-    // Diff
-    pub diff_added: Color,
-    pub diff_added_dimmed: Color,
-    pub diff_added_word: Color,
-    pub diff_removed: Color,
-    pub diff_removed_dimmed: Color,
-    pub diff_removed_word: Color,
-
-    // Backgrounds
-    pub user_message_bg: Color,
-    pub message_actions_bg: Color,
-
-    // Special
-    pub fast_mode: Color,
-    pub rate_limit_fill: Color,
-    pub rate_limit_empty: Color,
-
-    // Spinner
-    pub spinner: Color,
-    pub spinner_shimmer: Color,
+    pub user_msg_bg: Color,
+    pub status_bg: Color,
+    pub bg: Color,
 }
-
-pub fn dark_theme() -> Theme { ... }
-pub fn light_theme() -> Theme { ... }
-pub fn dark_daltonized_theme() -> Theme { ... }
-pub fn light_daltonized_theme() -> Theme { ... }
-pub fn dark_ansi_theme() -> Theme { ... }
-pub fn light_ansi_theme() -> Theme { ... }
-
-// Already implemented — verify all fields above are present
 ```
 
 ### ratatui Color Mapping

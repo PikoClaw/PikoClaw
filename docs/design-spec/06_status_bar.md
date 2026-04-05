@@ -7,137 +7,85 @@
 ## Layout
 
 ```
-claude-opus-4-6  ·  ~/projects/myapp  ·  ↑18.9k ↓2.1k ⚡3.4k  $0.042  ·  dark
+> · ↑18.9k ↓2.1k · $0.042 · ↑82%                                 pikoclaw [dark]
 ```
 
-Single line, full terminal width. Fields separated by ` · ` (space + bullet operator `∙` U+2219 + space).
+Single line, full terminal width. Left side contains live session state; right side shows app name and active theme.
 
 ### Field order (left → right)
 
 | # | Field | Always shown? | Example |
 |---|-------|--------------|---------|
-| 1 | Model name | Yes | `claude-opus-4-6` |
-| 2 | Current working directory | Yes | `~/projects/myapp` |
-| 3 | Token usage | Yes | `↑18.9k ↓2.1k ⚡3.4k` |
-| 4 | Session cost | Yes (when > $0.001) | `$0.042` |
-| 5 | Active theme | Yes | `dark` |
-| 6 | Rate limit bar | Only when rate-limited | `5h: ████░ 78%` |
-| 7 | Vim mode | Only when vim mode on | `[NORMAL]` or `[INSERT]` |
-| 8 | Plan mode | Only when plan mode on | `[PLAN]` |
+| 1 | Current spinner / prompt glyph | Yes | `>` or animated thinking glyph |
+| 2 | Token usage | Yes | `↑18.9k ↓2.1k` |
+| 3 | Session cost | Yes | `$0.042` |
+| 4 | Context usage | Yes | `↑82%` |
+| 5 | Rate limit countdown | Only when rate-limited | `⏳2m14s` |
+| 6 | Plan mode marker | Only when plan mode on | `[PLAN]` |
+| 7 | Brand + theme | Yes | `pikoclaw [dark]` |
 
 ---
 
 ## Token Display Format
 
-```
-↑18.9k ↓2.1k ⚡3.4k
-```
+`↑input ↓output`
 
 | Symbol | Meaning | Color |
 |--------|---------|-------|
-| `↑` | Input tokens sent (cumulative session) | `theme.text` |
-| `↓` | Output tokens received | `theme.text` |
-| `⚡` | Cache-read tokens (cheap, 10% of input cost) | `theme.suggestion` (blue) |
+| `↑` | Input tokens sent (cumulative session) | `theme.inactive` |
+| `↓` | Output tokens received | `theme.inactive` |
 
 **Number formatting**:
 - < 1,000: show exact (`342`)
 - ≥ 1,000: show with `k` suffix, 1 decimal (`1.3k`, `18.9k`)
 - ≥ 1,000,000: show with `M` suffix (`1.2M`)
 
-**Context usage color coding** (applied to the whole token section):
-
-| Usage % | Color |
-|---------|-------|
-| 0–49% | `theme.text` (normal) |
-| 50–79% | `theme.warning` (amber) |
-| 80–89% | `theme.warning` bold |
-| ≥ 90% | `theme.error` (red) |
-
-When context is near-full, a compact bar may appear:
-
-```
-↑18.9k ↓2.1k ⚡3.4k  [████████░░ 82%]
-```
-
----
-
 ## Cost Display Format
-
-```
-$0.042
-```
 
 | Range | Format | Example |
 |-------|--------|---------|
-| < $0.001 | hidden | — |
+| < $0.001 | `$0.000` style may still be shown if session has started | `$0.000` |
 | $0.001–$0.999 | `$X.XXX` | `$0.042` |
 | $1.00–$9.99 | `$X.XX` | `$3.24` |
 | ≥ $10.00 | `$XX.XX` | `$12.50` |
 
-Color: `theme.inactive` normally. `theme.warning` if > $5, `theme.error` if > $20.
+Color: `theme.inactive`.
 
 ---
 
-## Rate Limit Bar
+## Context Usage
 
-Only shown when the user has hit a usage tier limit.
+The status bar shows a compact context usage percentage based on input tokens:
 
-```
-5h: ████████░░  78%
-```
+`↑82%`
 
-- `5h` / `7d` — the window being limited (5-hour or 7-day)
-- Filled bar: `theme.rate_limit_fill` (`rgb(87,105,247)` blue)
-- Empty bar: `theme.rate_limit_empty` (`rgb(39,47,111)` dark blue)
-- Percentage: exact number
-- Bar width: 10 characters (`█` × filled + `░` × remaining)
+Color:
 
----
-
-## Model Name Display
-
-Show the model identifier, cleaned up for display:
-
-| API model ID | Display |
-|-------------|---------|
-| `claude-opus-4-6` | `claude-opus-4-6` |
-| `claude-sonnet-4-6` | `claude-sonnet-4-6` |
-| `claude-haiku-4-5-20251001` | `claude-haiku-4-5` |
-
-Strip trailing date suffixes for display. Color: `theme.text`.
-
----
-
-## CWD Display
-
-- Full absolute path, but replace `$HOME` with `~`
-- If path is very long (> 30 chars) and terminal is narrow: abbreviate middle dirs with `…`
-
-```
-~/projects/myapp/src/components   →   ~/…/src/components  (if needed)
-```
-
----
-
-## Vim Mode Indicator
-
-When vim mode is enabled, show current mode after the theme field:
-
-| Mode | Display | Color |
-|------|---------|-------|
-| Insert | `[INSERT]` | `theme.suggestion` (blue) |
-| Normal | `[NORMAL]` | `theme.warning` (amber) |
-| Visual | `[VISUAL]` | `theme.claude` (orange) |
+| Usage % | Color |
+|---------|-------|
+| 0–79% | `theme.claude` |
+| 80–89% | `theme.warning` |
+| ≥ 90% | `theme.error` |
 
 ---
 
 ## Plan Mode Indicator
 
-```
-[PLAN MODE]
-```
+`[PLAN]`
 
-Color: `theme.plan_mode` (teal `rgb(0,102,102)`). Shown as a badge.
+Color: yellow/bold in the current Rust implementation.
+
+---
+
+## Rate Limit Indicator
+
+Only shown when the app has a live retry window after a 429/529-style condition.
+
+Format:
+
+`⏳2m14s`
+
+Color: `theme.warning`
 
 ---
 
@@ -145,23 +93,23 @@ Color: `theme.plan_mode` (teal `rgb(0,102,102)`). Shown as a badge.
 
 **Normal session:**
 ```
-claude-opus-4-6  ·  ~/projects/myapp  ·  ↑18.9k ↓2.1k ⚡3.4k  $0.042  ·  dark
+> · ↑18.9k ↓2.1k · $0.042 · ↑37%                                 pikoclaw [dark]
 ```
 
 **Rate limited:**
 ```
-claude-sonnet-4-6  ·  ~/myapp  ·  ↑5.2k ↓0.8k  $0.008  ·  dark  ·  5h: ████████░░ 78%
+> · ↑5.2k ↓0.8k · $0.008 · ↑16% · ⏳2m14s                        pikoclaw [dark]
 ```
 
 **High context usage:**
 ```
-claude-opus-4-6  ·  ~/myapp  ·  ↑168k ↓12k ⚡42k  $2.84  [████████░░ 90%]  ·  dark
+> · ↑168k ↓12k · $2.84 · ↑90%                                   pikoclaw [dark]
 ```
-(token section turns red at 90%)
+(context usage turns red at 90%)
 
-**Vim normal mode + plan mode:**
+**Plan mode:**
 ```
-claude-opus-4-6  ·  ~/myapp  ·  ↑3.1k ↓0.4k  $0.006  ·  dark  ·  [PLAN MODE]  [NORMAL]
+> · ↑3.1k ↓0.4k · $0.006 · ↑11% · [PLAN]                        pikoclaw [dark]
 ```
 
 ---
@@ -170,28 +118,18 @@ claude-opus-4-6  ·  ~/myapp  ·  ↑3.1k ↓0.4k  $0.006  ·  dark  ·  [PLAN M
 
 ```rust
 pub struct StatusBarState {
-    pub model: String,
-    pub cwd: PathBuf,
     pub input_tokens: u64,
     pub output_tokens: u64,
-    pub cache_read_tokens: u64,
     pub cost_usd: f64,
-    pub context_limit: u64,
+    pub context_percent: u8,
     pub theme_name: String,
-    pub rate_limit: Option<RateLimitState>,
-    pub vim_mode: Option<VimMode>,
+    pub rate_limit_remaining: Option<Duration>,
     pub plan_mode: bool,
-}
-
-pub struct RateLimitState {
-    pub window: String,   // "5h" or "7d"
-    pub used_pct: u8,     // 0–100
 }
 
 impl Widget for StatusBar {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // build fields as Span vec, join with " · " separators
-        // apply color coding for context usage
+        // build left spans and a right-aligned app/theme label
         // render into single Line
     }
 }
