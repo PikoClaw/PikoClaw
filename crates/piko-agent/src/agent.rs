@@ -56,22 +56,21 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: AgentConfig, api_key: impl Into<String>) -> Result<Self> {
-        Self::with_options(config, api_key, "https://api.anthropic.com", false)
+        Self::with_options(config, api_key, "https://api.anthropic.com", false, None)
     }
 
-    /// Create an agent with a custom base URL and optional Bearer-token auth.
-    /// Set `use_bearer_auth = true` when the credential comes from ANTHROPIC_AUTH_TOKEN
-    /// (e.g. OpenRouter) rather than a plain Anthropic API key.
     pub fn with_options(
         config: AgentConfig,
         credential: impl Into<String>,
         base_url: impl Into<String>,
         use_bearer_auth: bool,
+        provider: Option<&str>,
     ) -> Result<Self> {
         let client = Arc::new(AnthropicClient::with_options(
             credential,
             base_url,
             use_bearer_auth,
+            provider,
         )?);
         let mut tools = ToolRegistry::with_defaults();
 

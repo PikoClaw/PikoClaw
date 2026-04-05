@@ -35,6 +35,10 @@ pub fn load_config() -> Result<PikoConfig> {
         config.api.base_url = base_url;
     }
 
+    if let Some(provider) = env::pikoclaw_provider() {
+        config.api.provider = Some(provider);
+    }
+
     // ANTHROPIC_DEFAULT_SONNET_MODEL mirrors claude-code's model-slot override.
     if let Some(model) = env::anthropic_default_sonnet_model().or_else(env::anthropic_model) {
         config.api.model = model.into();

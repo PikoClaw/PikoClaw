@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use cli::{Cli, Commands};
 use piko_agent::agent::{Agent, AgentConfig};
+use piko_api::ModelRegistry;
 use piko_config::loader::{load_config, save_config};
 use piko_session::fs_store::FilesystemSessionStore;
 use piko_session::store::SessionStore;
@@ -11,6 +12,7 @@ use piko_skills::dispatcher::SkillDispatcher;
 use piko_skills::loader::load_user_skills;
 use piko_skills::registry::SkillRegistry;
 use piko_tui::app::App;
+use piko_types::ProviderId;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
@@ -45,12 +47,61 @@ async fn main() -> Result<()> {
         config.api.model = piko_types::model::ModelId::from_alias(model);
     }
 
+    let model_registry = ModelRegistry::new();
+    let inferred_provider = config.api.provider.clone().or_else(|| {
+        model_registry
+            .find_provider_for_model(config.api.model.as_str())
+            .map(|p| p.to_string())
+    });
+    config.api.provider = inferred_provider.clone();
+
+    if inferred_provider.as_deref() == Some(ProviderId::OPENROUTER) {
+        if config.api.base_url == "https://api.anthropic.com" {
+            config.api.base_url = "https://openrouter.ai/api".to_string();
+        }
+        if config.api.auth_token.is_none() {
+            if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
+                if !key.is_empty() {
+                    config.api.auth_token = Some(key);
+                }
+            }
+        }
+        if let Some((provider, model)) = config.api.model.as_str().split_once('/') {
+            if provider == ProviderId::OPENROUTER {
+                config.api.model = model.into();
+            }
+        }
+    } else if inferred_provider.as_deref() == Some(ProviderId::OPENAI) {
+        if let Some(base_url) = piko_config::env::openai_base_url() {
+            config.api.base_url = base_url;
+        } else if config.api.base_url == "https://api.anthropic.com" {
+            config.api.base_url = "https://api.openai.com".to_string();
+        }
+        if let Some(key) = piko_config::env::openai_api_key() {
+            config.api.api_key = Some(key);
+        }
+        config.api.auth_token = None;
+        if let Some((provider, model)) = config.api.model.as_str().split_once('/') {
+            if provider == ProviderId::OPENAI {
+                config.api.model = model.into();
+            }
+        }
+    }
+
     // Resolve credential following the same priority as claude-code:
     //   1. ANTHROPIC_AUTH_TOKEN  → Bearer-token auth (e.g. OpenRouter)
     //   2. ANTHROPIC_API_KEY     → standard x-api-key auth
     //   3. Stored OAuth tokens   → refresh silently or run browser login flow
     // ANTHROPIC_BASE_URL is already applied to config.api.base_url by load_config().
-    let (credential, use_bearer_auth) = if let Some(token) = config.api.auth_token.clone() {
+    let (credential, use_bearer_auth) = if inferred_provider.as_deref() == Some(ProviderId::OPENAI)
+    {
+        let key = config
+            .api
+            .api_key
+            .clone()
+            .ok_or_else(|| anyhow!("OPENAI_API_KEY is required for provider 'openai'"))?;
+        (key, true)
+    } else if let Some(token) = config.api.auth_token.clone() {
         (token, true)
     } else if let Some(key) = config.api.api_key.clone() {
         (key, false)
@@ -70,8 +121,13 @@ async fn main() -> Result<()> {
     match cli.command {
         Some(Commands::Resume { ref session_id }) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
-            let mut agent =
-                Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
+            let mut agent = Agent::with_options(
+                agent_config,
+                &credential,
+                &base_url,
+                use_bearer_auth,
+                inferred_provider.as_deref(),
+            )?;
             let store = Arc::new(FilesystemSessionStore::with_default_path());
 
             let session = SessionStore::load(store.as_ref(), session_id)
@@ -84,8 +140,13 @@ async fn main() -> Result<()> {
         }
         Some(Commands::Continue) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
-            let mut agent =
-                Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
+            let mut agent = Agent::with_options(
+                agent_config,
+                &credential,
+                &base_url,
+                use_bearer_auth,
+                inferred_provider.as_deref(),
+            )?;
             let store = Arc::new(FilesystemSessionStore::with_default_path());
 
             if let Some(session) =
@@ -105,15 +166,25 @@ async fn main() -> Result<()> {
         None => {
             if let Some(ref prompt) = cli.print {
                 let agent_config = build_agent_config(&config, &cli, cwd);
-                let mut agent =
-                    Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
+                let mut agent = Agent::with_options(
+                    agent_config,
+                    &credential,
+                    &base_url,
+                    use_bearer_auth,
+                    inferred_provider.as_deref(),
+                )?;
                 agent.run_print(prompt).await?;
                 println!();
                 Ok(())
             } else {
                 let agent_config = build_agent_config(&config, &cli, cwd.clone());
-                let mut agent =
-                    Agent::with_options(agent_config, &credential, &base_url, use_bearer_auth)?;
+                let mut agent = Agent::with_options(
+                    agent_config,
+                    &credential,
+                    &base_url,
+                    use_bearer_auth,
+                    inferred_provider.as_deref(),
+                )?;
                 let store = Arc::new(FilesystemSessionStore::with_default_path());
                 let session = piko_session::session::Session::new(
                     cwd.to_string_lossy().to_string(),

@@ -14,7 +14,9 @@ use crossterm::terminal::{
 use crossterm::ExecutableCommand;
 use piko_agent::agent::Agent;
 use piko_agent::output::{AgentEvent, OutputSink};
+use piko_api::AnthropicClient;
 use piko_config::config::PermissionsConfig;
+use piko_config::loader::{load_config, save_config};
 use piko_permissions::checker::PermissionDecision;
 use piko_permissions::policy::PermissionPolicy;
 use piko_skills::dispatcher::{DispatchResult, SkillDispatcher};
@@ -44,6 +46,8 @@ pub enum AppState {
     AskingPermission,
     AskingQuestion,
     AskingPlanModeExit,
+    SelectingProvider,
+    EnteringApiKey,
     Exiting,
 }
 
@@ -94,6 +98,8 @@ pub struct App {
     pub pending_plan_mode_exit: Option<oneshot::Sender<bool>>,
     /// Raw (non-tilde) CWD used for shortening file paths in tool displays.
     pub cwd_raw: String,
+    pub connect_dialog: ConnectDialogState,
+    pub api_key_dialog: Option<ApiKeyDialogState>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +136,26 @@ pub struct ToolCallInfo {
 pub struct ToolResultSummary {
     pub is_error: bool,
     pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectProviderOption {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub description: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectDialogState {
+    pub selected_index: usize,
+    pub options: Vec<ConnectProviderOption>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ApiKeyDialogState {
+    pub provider_id: String,
+    pub provider_label: String,
+    pub input: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,6 +257,27 @@ impl App {
             plan_mode_exit_rx,
             pending_plan_mode_exit: None,
             cwd_raw,
+            connect_dialog: ConnectDialogState {
+                selected_index: 0,
+                options: vec![
+                    ConnectProviderOption {
+                        id: "anthropic",
+                        label: "Anthropic",
+                        description: "Claude models via Anthropic API key",
+                    },
+                    ConnectProviderOption {
+                        id: "openai",
+                        label: "OpenAI",
+                        description: "GPT models via OpenAI API key",
+                    },
+                    ConnectProviderOption {
+                        id: "openrouter",
+                        label: "OpenRouter",
+                        description: "Anthropic-compatible gateway via bearer token",
+                    },
+                ],
+            },
+            api_key_dialog: None,
         }
     }
 
@@ -346,6 +393,64 @@ impl App {
                     tool_info: None,
                 });
                 self.state = AppState::WaitingForAgent;
+            }
+            return Ok(());
+        }
+
+        if self.state == AppState::SelectingProvider {
+            match key.code {
+                KeyCode::Esc => {
+                    self.state = AppState::Running;
+                }
+                KeyCode::Up => {
+                    self.connect_dialog.selected_index =
+                        self.connect_dialog.selected_index.saturating_sub(1);
+                }
+                KeyCode::Down => {
+                    self.connect_dialog.selected_index = (self.connect_dialog.selected_index + 1)
+                        .min(self.connect_dialog.options.len().saturating_sub(1));
+                }
+                KeyCode::Enter => {
+                    if let Some(selected) = self
+                        .connect_dialog
+                        .options
+                        .get(self.connect_dialog.selected_index)
+                    {
+                        self.api_key_dialog = Some(ApiKeyDialogState {
+                            provider_id: selected.id.to_string(),
+                            provider_label: selected.label.to_string(),
+                            input: String::new(),
+                        });
+                        self.state = AppState::EnteringApiKey;
+                    }
+                }
+                _ => {}
+            }
+            return Ok(());
+        }
+
+        if self.state == AppState::EnteringApiKey {
+            match key.code {
+                KeyCode::Esc => {
+                    self.api_key_dialog = None;
+                    self.state = AppState::SelectingProvider;
+                }
+                KeyCode::Backspace => {
+                    if let Some(dialog) = self.api_key_dialog.as_mut() {
+                        dialog.input.pop();
+                    }
+                }
+                KeyCode::Enter => {
+                    if let Some(dialog) = self.api_key_dialog.take() {
+                        self.apply_provider_connection(dialog)?;
+                    }
+                }
+                KeyCode::Char(c) => {
+                    if let Some(dialog) = self.api_key_dialog.as_mut() {
+                        dialog.input.push(c);
+                    }
+                }
+                _ => {}
             }
             return Ok(());
         }
@@ -535,10 +640,15 @@ impl App {
                     self.messages.push(ChatMessage {
                         role: MessageRole::System,
                         content:
-                            "Commands: /help, /clear, /model <name>, /theme [name], /compact, /cost, /plan, /exit"
+                            "Commands: /help, /clear, /model <name>, /theme [name], /compact, /cost, /connect, /plan, /exit"
                                 .to_string(),
                     tool_info: None,
         });
+                }
+                "connect" => {
+                    self.connect_dialog.selected_index = 0;
+                    self.api_key_dialog = None;
+                    self.state = AppState::SelectingProvider;
                 }
                 "theme" => {
                     if let Some(name) = args.first() {
@@ -627,6 +737,64 @@ impl App {
                 self.run_agent_turn(input, api_input).await?;
             }
         }
+        Ok(())
+    }
+
+    fn apply_provider_connection(&mut self, dialog: ApiKeyDialogState) -> Result<()> {
+        let key = dialog.input.trim().to_string();
+        if key.is_empty() {
+            self.messages.push(ChatMessage {
+                role: MessageRole::System,
+                content: "Connection cancelled: API key was empty.".to_string(),
+                tool_info: None,
+            });
+            self.state = AppState::Running;
+            return Ok(());
+        }
+
+        let mut config = load_config()?;
+        config.api.provider = Some(dialog.provider_id.clone());
+
+        match dialog.provider_id.as_str() {
+            "anthropic" => {
+                config.api.base_url = "https://api.anthropic.com".to_string();
+                config.api.api_key = Some(key.clone());
+                config.api.auth_token = None;
+            }
+            "openai" => {
+                config.api.base_url = "https://api.openai.com".to_string();
+                config.api.api_key = Some(key.clone());
+                config.api.auth_token = None;
+            }
+            "openrouter" => {
+                config.api.base_url = "https://openrouter.ai/api".to_string();
+                config.api.auth_token = Some(key.clone());
+                config.api.api_key = None;
+            }
+            _ => {}
+        }
+
+        save_config(&config)?;
+
+        let mut agent = self.agent.blocking_lock();
+        agent.client = Arc::new(AnthropicClient::with_options(
+            key,
+            config.api.base_url.clone(),
+            config.api.auth_token.is_some() || dialog.provider_id == "openai",
+            Some(dialog.provider_id.as_str()),
+        )?);
+        agent.config.model = config.api.model.clone();
+        self.model_name = config.api.model.as_str().to_string();
+
+        self.messages.push(ChatMessage {
+            role: MessageRole::System,
+            content: format!(
+                "Connected to {}. Use /model to choose a model if needed.",
+                dialog.provider_label
+            ),
+            tool_info: None,
+        });
+        self.state = AppState::Running;
         Ok(())
     }
 

@@ -31,6 +31,7 @@ impl SkillDispatcher {
             "quit".to_string(),
             "plan".to_string(),
             "cost".to_string(),
+            "connect".to_string(),
         ];
         Self {
             registry,
@@ -97,6 +98,13 @@ mod tests {
         let d = make_dispatcher();
         let result = d.dispatch("/cost");
         assert!(matches!(result, DispatchResult::BuiltIn { ref name, .. } if name == "cost"));
+    }
+
+    #[test]
+    fn connect_is_builtin() {
+        let d = make_dispatcher();
+        let result = d.dispatch("/connect");
+        assert!(matches!(result, DispatchResult::BuiltIn { ref name, .. } if name == "connect"));
     }
 
     #[test]

@@ -79,6 +79,14 @@ pub fn render(frame: &mut Frame, app: &App) {
         AppState::AskingPermission => render_permission_dialog(frame, app, chunks[2], t),
         AppState::AskingQuestion => render_question_dialog(frame, app, chunks[2], t),
         AppState::AskingPlanModeExit => render_plan_mode_exit_dialog(frame, chunks[2], t),
+        AppState::SelectingProvider => {
+            render_input_bar(frame, app, chunks[2], t);
+            render_connect_dialog(frame, app, area, t);
+        }
+        AppState::EnteringApiKey => {
+            render_input_bar(frame, app, chunks[2], t);
+            render_api_key_dialog(frame, app, area, t);
+        }
         _ => render_input_bar(frame, app, chunks[2], t),
     }
 }
@@ -744,6 +752,8 @@ fn current_spinner(app: &App, t: &Theme) -> (String, Color) {
         AppState::AskingPermission => ("◈".to_string(), t.permission),
         AppState::AskingQuestion => ("?".to_string(), t.permission),
         AppState::AskingPlanModeExit => ("◑".to_string(), Color::Yellow),
+        AppState::SelectingProvider => ("⇄".to_string(), t.permission),
+        AppState::EnteringApiKey => ("⌘".to_string(), t.permission),
         AppState::Exiting => ("·".to_string(), t.subtle),
     }
 }
@@ -999,6 +1009,135 @@ fn render_plan_mode_exit_dialog(frame: &mut Frame, area: ratatui::layout::Rect, 
             .wrap(Wrap { trim: false }),
         area,
     );
+}
+
+fn render_connect_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
+    let dialog = centered_rect(64, 10, area);
+    frame.render_widget(
+        Block::default().style(Style::default().bg(Color::Rgb(0, 0, 0))),
+        area,
+    );
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(t.permission))
+        .title(Span::styled(
+            " Connect a Provider ",
+            Style::default()
+                .fg(t.permission)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let mut lines = vec![Line::from(Span::styled(
+        "Choose a provider for this session",
+        Style::default().fg(t.inactive),
+    ))];
+
+    for (idx, option) in app.connect_dialog.options.iter().enumerate() {
+        let selected = idx == app.connect_dialog.selected_index;
+        let marker = if selected { "›" } else { " " };
+        let name_style = if selected {
+            Style::default().fg(t.text).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.text)
+        };
+        let desc_style = if selected {
+            Style::default().fg(t.permission)
+        } else {
+            Style::default().fg(t.inactive)
+        };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{marker} "), Style::default().fg(t.permission)),
+            Span::styled(option.label, name_style),
+            Span::raw("  "),
+            Span::styled(option.description, desc_style),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "Enter to continue, Esc to cancel",
+        Style::default().fg(t.subtle),
+    )));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().bg(t.bg))
+            .wrap(Wrap { trim: false }),
+        dialog,
+    );
+}
+
+fn render_api_key_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
+    let Some(dialog_state) = app.api_key_dialog.as_ref() else {
+        return;
+    };
+
+    let dialog = centered_rect(64, 9, area);
+    frame.render_widget(
+        Block::default().style(Style::default().bg(Color::Rgb(0, 0, 0))),
+        area,
+    );
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(t.permission))
+        .title(Span::styled(
+            format!(" Connect {} ", dialog_state.provider_label),
+            Style::default()
+                .fg(t.permission)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+    let masked = if dialog_state.input.is_empty() {
+        "Paste your API key here...".to_string()
+    } else {
+        let visible = dialog_state.input.chars().count().saturating_sub(4);
+        let tail: String = dialog_state.input.chars().skip(visible).collect();
+        format!("{}{}", "•".repeat(visible), tail)
+    };
+
+    let lines = vec![
+        Line::from(Span::styled("API Key", Style::default().fg(t.inactive))),
+        Line::from(vec![
+            Span::styled(
+                masked,
+                if dialog_state.input.is_empty() {
+                    Style::default().fg(t.subtle)
+                } else {
+                    Style::default().fg(t.text)
+                },
+            ),
+            Span::styled("█", Style::default().fg(t.permission)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Enter to save, Esc to go back",
+            Style::default().fg(t.subtle),
+        )),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().bg(t.bg))
+            .wrap(Wrap { trim: false }),
+        dialog,
+    );
+}
+
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let popup_width = width.min(area.width.saturating_sub(4));
+    let popup_height = height.min(area.height.saturating_sub(4));
+    Rect {
+        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
+        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
+        width: popup_width,
+        height: popup_height,
+    }
 }
 
 // ── Welcome header ────────────────────────────────────────────────────────────

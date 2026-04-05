@@ -18,9 +18,23 @@ pub fn anthropic_model() -> Option<String> {
     env::var("ANTHROPIC_MODEL").ok()
 }
 
+pub fn pikoclaw_provider() -> Option<String> {
+    env::var("PIKOCLAW_PROVIDER")
+        .ok()
+        .or_else(|| env::var("CLAURST_PROVIDER").ok())
+}
+
 /// Model override for the default Sonnet slot (mirrors claude-code's ANTHROPIC_DEFAULT_SONNET_MODEL).
 pub fn anthropic_default_sonnet_model() -> Option<String> {
     env::var("ANTHROPIC_DEFAULT_SONNET_MODEL").ok()
+}
+
+pub fn openai_api_key() -> Option<String> {
+    env::var("OPENAI_API_KEY").ok()
+}
+
+pub fn openai_base_url() -> Option<String> {
+    env::var("OPENAI_BASE_URL").ok()
 }
 
 pub fn pikoclaw_config_path() -> Option<String> {

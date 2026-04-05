@@ -4,6 +4,7 @@ use piko_types::model::ModelId;
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
+            provider: None,
             model: ModelId::default(),
             max_tokens: 8192,
             base_url: "https://api.anthropic.com".to_string(),

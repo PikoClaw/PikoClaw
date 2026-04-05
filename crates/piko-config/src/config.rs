@@ -16,6 +16,8 @@ fn default_thinking_budget_tokens() -> u32 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
+    #[serde(default)]
+    pub provider: Option<String>,
     pub model: ModelId,
     pub max_tokens: u32,
     pub base_url: String,
