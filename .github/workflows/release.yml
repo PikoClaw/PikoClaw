@@ -75,15 +75,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: |
-            pikoclaw-linux-x86_64/pikoclaw-linux-x86_64
-            pikoclaw-linux-x86_64/pikoclaw-linux-x86_64.sha256
-            pikoclaw-macos-x86_64/pikoclaw-macos-x86_64
-            pikoclaw-macos-x86_64/pikoclaw-macos-x86_64.sha256
-            pikoclaw-macos-aarch64/pikoclaw-macos-aarch64
-            pikoclaw-macos-aarch64/pikoclaw-macos-aarch64.sha256
-            pikoclaw-windows-x86_64.exe/pikoclaw-windows-x86_64.exe
-            pikoclaw-windows-x86_64.exe/pikoclaw-windows-x86_64.exe.sha256
+          fail_on_unmatched_files: true
+          files: pikoclaw-*/*
 
   update-tap:
     name: Update Homebrew Tap
