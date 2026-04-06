@@ -746,7 +746,7 @@ impl App {
                     }
                 }
                 "compact" => {
-                    self.compact_context();
+                    self.compact_context().await;
                 }
                 "plan" => {
                     let now_active = !self.plan_mode.load(Ordering::SeqCst);
@@ -769,14 +769,15 @@ impl App {
                     if let Some(model_name) = args.first() {
                         use piko_types::model::ModelId;
                         let model = ModelId::from_alias(model_name);
-                        self.agent.blocking_lock().config.model = model.clone();
+                        self.agent.lock().await.config.model = model.clone();
+                        self.model_name = model.as_str().to_string();
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Model set to {}", model.as_str()),
                             tool_info: None,
                         });
                     } else {
-                        let model = self.agent.blocking_lock().config.model.as_str().to_string();
+                        let model = self.agent.lock().await.config.model.as_str().to_string();
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Current model: {}", model),
@@ -918,8 +919,8 @@ impl App {
         });
     }
 
-    fn compact_context(&mut self) {
-        let mut agent = self.agent.blocking_lock();
+    async fn compact_context(&mut self) {
+        let mut agent = self.agent.lock().await;
         let summary: String = agent
             .context
             .messages

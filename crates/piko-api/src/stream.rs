@@ -68,6 +68,8 @@ pub struct MessageDeltaData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaUsage {
     #[serde(default, deserialize_with = "null_as_zero")]
+    pub input_tokens: u32,
+    #[serde(default, deserialize_with = "null_as_zero")]
     pub output_tokens: u32,
 }
 

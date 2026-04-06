@@ -30,12 +30,49 @@ pub const HAIKU_PRICING: ModelPricing = ModelPricing {
     cache_read_per_m: 0.03,
 };
 
+pub const FREE_PRICING: ModelPricing = ModelPricing {
+    input_per_m: 0.0,
+    output_per_m: 0.0,
+    cache_write_per_m: 0.0,
+    cache_read_per_m: 0.0,
+};
+
 /// Look up pricing by model identifier string.
 pub fn get_pricing(model: &str) -> ModelPricing {
-    if model.contains("opus") {
+    if model.contains(":free") {
+        FREE_PRICING
+    } else if model.contains("opus") {
         OPUS_PRICING
     } else if model.contains("haiku") {
         HAIKU_PRICING
+    } else if model.contains("gpt-4o-mini") {
+        ModelPricing {
+            input_per_m: 0.15,
+            output_per_m: 0.60,
+            cache_write_per_m: 0.0,
+            cache_read_per_m: 0.0,
+        }
+    } else if model.contains("gpt-4o") {
+        ModelPricing {
+            input_per_m: 2.50,
+            output_per_m: 10.0,
+            cache_write_per_m: 0.0,
+            cache_read_per_m: 0.0,
+        }
+    } else if model == "o3" || model.ends_with("/o3") {
+        ModelPricing {
+            input_per_m: 10.0,
+            output_per_m: 40.0,
+            cache_write_per_m: 0.0,
+            cache_read_per_m: 0.0,
+        }
+    } else if model == "o4-mini" || model.ends_with("/o4-mini") {
+        ModelPricing {
+            input_per_m: 1.10,
+            output_per_m: 4.40,
+            cache_write_per_m: 0.0,
+            cache_read_per_m: 0.0,
+        }
     } else {
         SONNET_PRICING
     }
@@ -164,6 +201,13 @@ mod tests {
     fn test_get_pricing_haiku() {
         let p = get_pricing("claude-haiku-4-5");
         assert!((p.input_per_m - 0.25).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_get_pricing_free_model() {
+        let p = get_pricing("stepfun/step-3.5-flash:free");
+        assert!((p.input_per_m - 0.0).abs() < f64::EPSILON);
+        assert!((p.output_per_m - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]

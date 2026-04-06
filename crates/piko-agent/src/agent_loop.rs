@@ -218,6 +218,9 @@ pub async fn run_turn(
                 StreamEvent::MessageDelta { delta, usage } => {
                     _stop_reason = delta.stop_reason;
                     if let Some(u) = usage {
+                        if u.input_tokens > 0 {
+                            input_tokens = u.input_tokens;
+                        }
                         output_tokens = u.output_tokens;
                     }
                 }

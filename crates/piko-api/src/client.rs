@@ -250,6 +250,7 @@ impl AnthropicClient {
             let mut tool_names: HashMap<usize, String> = HashMap::new();
             let mut tool_args: HashMap<usize, String> = HashMap::new();
             let mut pending_stop_reason: Option<StopReason> = None;
+            let mut final_input_tokens = 0u32;
             let mut final_output_tokens = 0u32;
             let model_name = req.model.to_string();
 
@@ -290,6 +291,11 @@ impl AnthropicClient {
                     }
 
                     if let Some(usage) = json.get("usage") {
+                        final_input_tokens = usage
+                            .get("prompt_tokens")
+                            .or_else(|| usage.get("input_tokens"))
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
                         final_output_tokens = usage
                             .get("completion_tokens")
                             .or_else(|| usage.get("output_tokens"))
@@ -401,6 +407,7 @@ impl AnthropicClient {
                     stop_sequence: None,
                 },
                 usage: Some(DeltaUsage {
+                    input_tokens: final_input_tokens,
                     output_tokens: final_output_tokens,
                 }),
             };
