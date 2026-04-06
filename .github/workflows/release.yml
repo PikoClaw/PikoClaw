@@ -77,9 +77,13 @@ jobs:
         with:
           files: |
             pikoclaw-linux-x86_64/pikoclaw-linux-x86_64
+            pikoclaw-linux-x86_64/pikoclaw-linux-x86_64.sha256
             pikoclaw-macos-x86_64/pikoclaw-macos-x86_64
+            pikoclaw-macos-x86_64/pikoclaw-macos-x86_64.sha256
             pikoclaw-macos-aarch64/pikoclaw-macos-aarch64
+            pikoclaw-macos-aarch64/pikoclaw-macos-aarch64.sha256
             pikoclaw-windows-x86_64.exe/pikoclaw-windows-x86_64.exe
+            pikoclaw-windows-x86_64.exe/pikoclaw-windows-x86_64.exe.sha256
 
   update-tap:
     name: Update Homebrew Tap

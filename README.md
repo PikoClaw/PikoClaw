@@ -50,6 +50,18 @@ Switch themes with `/theme [name]` — available names: `dark`, `light`, `dark-d
 
 ## Install
 
+```bash
+curl -fsSL https://pikoclaw.com/install.sh | bash
+```
+
+Auto-detects your OS and architecture, downloads the right binary, verifies the checksum, and installs to `/usr/local/bin`.
+
+**To update**, just re-run the same command — it always pulls the latest release and overwrites the existing binary:
+
+```bash
+curl -fsSL https://pikoclaw.com/install.sh | bash
+```
+
 You can also go to the [latest GitHub Release](https://github.com/PikoClaw/PikoClaw/releases) and download the appropriate binary for your platform.
 
 ### macOS
