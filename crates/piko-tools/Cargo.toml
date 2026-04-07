@@ -21,3 +21,6 @@ tokio-util.workspace = true
 reqwest.workspace = true
 piko-types.workspace = true
 piko-permissions.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+directories.workspace = true

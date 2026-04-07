@@ -1202,7 +1202,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "piko-agent"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1223,7 +1223,7 @@ dependencies = [
 
 [[package]]
 name = "piko-api"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1241,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "piko-config"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "directories",
@@ -1254,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "piko-mcp"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1272,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "piko-oauth"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "directories",
@@ -1288,7 +1288,7 @@ dependencies = [
 
 [[package]]
 name = "piko-permissions"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "piko-session"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1321,7 +1321,7 @@ dependencies = [
 
 [[package]]
 name = "piko-skills"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "directories",
@@ -1337,10 +1337,12 @@ dependencies = [
 
 [[package]]
 name = "piko-tools"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
+ "directories",
  "globset",
  "ignore",
  "piko-permissions",
@@ -1353,11 +1355,12 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "piko-tui"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1384,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "piko-types"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "serde",
  "serde_json",
@@ -1393,7 +1396,7 @@ dependencies = [
 
 [[package]]
 name = "pikoclaw"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "anyhow",
  "clap",

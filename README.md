@@ -181,20 +181,61 @@ export ANTHROPIC_DEFAULT_SONNET_MODEL="stepfun/step-3.5-flash:free"
 
 ## Built-in Tools
 
+### File & Shell
+
 | Tool | Description |
 |---|---|
-| `Bash` | Run shell commands |
+| `Bash` | Run shell commands with timeout and background support |
+| `PowerShell` | Execute PowerShell commands (Windows native or `pwsh` on macOS/Linux) |
 | `Read` | Read files with line numbers |
-| `Write` | Write files |
+| `Write` | Write or create files |
 | `Edit` | Exact string replacement in files |
-| `Glob` | Find files by pattern |
+| `ApplyPatch` | Apply unified diff patches to files |
+| `BatchEdit` | Apply multiple file edits atomically |
+| `Glob` | Find files by glob pattern |
 | `Grep` | Search file contents with regex |
+| `NotebookEdit` | Edit Jupyter notebook cells |
+
+### Web
+
+| Tool | Description |
+|---|---|
 | `WebFetch` | Fetch and extract text from URLs |
 | `WebSearch` | Web search via Anthropic beta |
-| `NotebookEdit` | Edit Jupyter notebook cells |
+
+### Tasks & Scheduling
+
+| Tool | Description |
+|---|---|
+| `TaskCreate` | Spawn a background task |
+| `TaskGet` | Get task details and status |
+| `TaskUpdate` | Update a task's status or progress |
+| `TaskList` | List all tasks |
+| `TaskStop` | Stop a running task |
+| `TaskOutput` | Get task output / logs |
+| `CronCreate` | Schedule a recurring cron task |
+| `CronDelete` | Cancel a scheduled cron task |
+| `CronList` | List all scheduled cron tasks |
+| `Sleep` | Wait for a specified duration (ms) |
+
+### Agent & Session
+
+| Tool | Description |
+|---|---|
+| `AskUserQuestion` | Ask the user multiple-choice or free-text questions |
 | `TodoWrite` | In-session task checklist |
-| `AskUserQuestion` | Ask the user multiple-choice questions |
-| `Agent` | Spawn isolated sub-agents |
+| `Brief` | Send a formatted status message to the user |
+| `StructuredOutput` | Return structured JSON output for SDK/non-interactive sessions |
+| `SendMessage` | Send a message to another agent |
+| `RemoteTrigger` | Dispatch a named event to another session |
+| `ToolSearch` | Search available tools by name or keyword |
+
+### Git Worktrees
+
+| Tool | Description |
+|---|---|
+| `EnterWorktree` | Create a new git worktree and switch the session into it |
+| `ExitWorktree` | Exit the current worktree session and restore the original directory |
 
 ## Slash Commands
 

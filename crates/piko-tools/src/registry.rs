@@ -41,9 +41,28 @@ impl ToolRegistry {
     pub fn with_defaults() -> Self {
         use crate::todo_write::{TodoStore, TodoWriteTool};
         use crate::{
-            bash::BashTool, file_edit::FileEditTool, file_read::FileReadTool,
-            file_write::FileWriteTool, glob::GlobTool, grep::GrepTool,
+            apply_patch::ApplyPatchTool,
+            bash::BashTool,
+            batch_edit::BatchEditTool,
+            brief::BriefTool,
+            cron::{CronCreateTool, CronDeleteTool, CronListTool},
+            file_edit::FileEditTool,
+            file_read::FileReadTool,
+            file_write::FileWriteTool,
+            glob::GlobTool,
+            grep::GrepTool,
             notebook_edit::NotebookEditTool,
+            powershell::PowerShellTool,
+            remote_trigger::RemoteTriggerTool,
+            send_message::SendMessageTool,
+            sleep::SleepTool,
+            synthetic_output::SyntheticOutputTool,
+            tasks::{
+                TaskCreateTool, TaskGetTool, TaskListTool, TaskOutputTool, TaskStopTool,
+                TaskUpdateTool,
+            },
+            tool_search::ToolSearchTool,
+            worktree::{EnterWorktreeTool, ExitWorktreeTool},
         };
         use std::collections::HashMap;
 
@@ -59,6 +78,26 @@ impl ToolRegistry {
         registry.register(Arc::new(NotebookEditTool));
         let todo_store: TodoStore = Arc::new(std::sync::Mutex::new(HashMap::new()));
         registry.register(Arc::new(TodoWriteTool::new(todo_store)));
+        registry.register(Arc::new(ApplyPatchTool));
+        registry.register(Arc::new(BatchEditTool));
+        registry.register(Arc::new(BriefTool));
+        registry.register(Arc::new(SleepTool));
+        registry.register(Arc::new(SyntheticOutputTool));
+        registry.register(Arc::new(TaskCreateTool));
+        registry.register(Arc::new(TaskGetTool));
+        registry.register(Arc::new(TaskUpdateTool));
+        registry.register(Arc::new(TaskListTool));
+        registry.register(Arc::new(TaskStopTool));
+        registry.register(Arc::new(TaskOutputTool));
+        registry.register(Arc::new(SendMessageTool));
+        registry.register(Arc::new(PowerShellTool));
+        registry.register(Arc::new(RemoteTriggerTool));
+        registry.register(Arc::new(ToolSearchTool));
+        registry.register(Arc::new(EnterWorktreeTool));
+        registry.register(Arc::new(ExitWorktreeTool));
+        registry.register(Arc::new(CronCreateTool));
+        registry.register(Arc::new(CronDeleteTool));
+        registry.register(Arc::new(CronListTool));
         registry
     }
 }
