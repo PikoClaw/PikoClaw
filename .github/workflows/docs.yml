@@ -54,7 +54,7 @@ jobs:
       - name: Generate sitemap.xml
         run: |
           BASE_URL="https://pikoclaw.com"
-          OUTPUT="website-repo/docs/sitemap.xml"
+          OUTPUT="website-repo/sitemap.xml"
           NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           echo '<?xml version="1.0" encoding="UTF-8"?>' > "$OUTPUT"
