@@ -51,12 +51,41 @@ jobs:
           # CNAME must live at repo root, not inside /docs — already there, nothing to do
           echo "pikoclaw.com" > website-repo/CNAME
 
+      - name: Generate sitemap.xml
+        run: |
+          BASE_URL="https://pikoclaw.com"
+          OUTPUT="website-repo/docs/sitemap.xml"
+          NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > "$OUTPUT"
+          echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' >> "$OUTPUT"
+
+          find website-repo/docs -name "*.html" \
+            ! -name "404.html" \
+            | sort \
+            | while read -r file; do
+                path="${file#website-repo/docs/}"
+                path="${path%index.html}"
+                path="${path%.html}"
+                if [[ "$path" == */ ]] || [[ "$path" == "" ]]; then
+                  url="${BASE_URL}/${path}"
+                else
+                  url="${BASE_URL}/${path}/"
+                fi
+                echo "  <url>" >> "$OUTPUT"
+                echo "    <loc>${url}</loc>" >> "$OUTPUT"
+                echo "    <lastmod>${NOW}</lastmod>" >> "$OUTPUT"
+                echo "  </url>" >> "$OUTPUT"
+              done
+
+          echo '</urlset>' >> "$OUTPUT"
+
       - name: Commit and push to pikoclaw-website
         working-directory: website-repo
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/
+          git add docs/ sitemap.xml
           # Only commit if there are actual changes
           git diff --staged --quiet || git commit -m "docs: rebuild from PikoClaw@${{ github.sha }}"
           git push
