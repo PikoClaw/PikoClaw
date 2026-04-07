@@ -18,7 +18,7 @@ use crossterm::terminal::{
 use crossterm::ExecutableCommand;
 use piko_agent::agent::Agent;
 use piko_agent::output::{AgentEvent, OutputSink};
-use piko_api::AnthropicClient;
+use piko_api::{AnthropicClient, ModelRegistry};
 use piko_config::config::PermissionsConfig;
 use piko_config::loader::{load_config, save_config};
 use piko_permissions::checker::PermissionDecision;
@@ -29,6 +29,7 @@ use piko_tools::plan_mode::{EnterPlanModeTool, ExitPlanModeTool, PlanModeExitReq
 use piko_types::message::{ContentBlock, ImageSource, Message};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use reqwest;
 use std::collections::HashMap;
 use std::io::{stdout, Stdout};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -53,6 +54,7 @@ pub enum AppState {
     AskingPlanModeExit,
     SelectingProvider,
     EnteringApiKey,
+    SelectingModel,
     Exiting,
 }
 
@@ -90,6 +92,10 @@ pub struct App {
     pub model_name: String,
     /// Provider name for header display (e.g. "Anthropic", "OpenAI", "OpenRouter").
     pub provider_name: String,
+    /// Provider ID used for model filtering (e.g. "anthropic", "openai", "openrouter").
+    pub provider_id: String,
+    /// Model registry for dynamic model lists.
+    pub model_registry: ModelRegistry,
     /// Working directory for header display.
     pub cwd: String,
     /// Set when a 429 is received; cleared once the instant passes.
@@ -109,6 +115,8 @@ pub struct App {
     pub cwd_raw: String,
     pub connect_dialog: ConnectDialogState,
     pub api_key_dialog: Option<ApiKeyDialogState>,
+    pub model_dialog: ModelDialogState,
+    pub model_fetch_rx: Option<tokio::sync::mpsc::Receiver<Vec<ModelOption>>>,
     pub slash_suggestions: Vec<TypeaheadSuggestion>,
     pub slash_suggestion_index: Option<usize>,
 }
@@ -157,6 +165,37 @@ pub struct ConnectProviderOption {
 }
 
 #[derive(Debug, Clone)]
+pub struct ModelOption {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelDialogState {
+    pub selected_index: usize,
+    pub options: Vec<ModelOption>,
+    pub filter: String,
+}
+
+impl ModelDialogState {
+    pub fn filtered_options(&self) -> Vec<&ModelOption> {
+        if self.filter.is_empty() {
+            return self.options.iter().collect();
+        }
+        let needle = self.filter.to_lowercase();
+        self.options
+            .iter()
+            .filter(|o| {
+                o.id.to_lowercase().contains(needle.as_str())
+                    || o.label.to_lowercase().contains(needle.as_str())
+                    || o.description.to_lowercase().contains(needle.as_str())
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ConnectDialogState {
     pub selected_index: usize,
     pub options: Vec<ConnectProviderOption>,
@@ -195,6 +234,8 @@ impl App {
         dispatcher: SkillDispatcher,
         theme_name: &str,
         provider_name: &str,
+        provider_id: &str,
+        registry: ModelRegistry,
         max_budget_usd: Option<f64>,
     ) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
@@ -261,6 +302,8 @@ impl App {
             show_header: true,
             model_name,
             provider_name: provider_name.to_string(),
+            provider_id: provider_id.to_string(),
+            model_registry: registry,
             cwd,
             rate_limit_until: None,
             history: InputHistory::new(),
@@ -293,6 +336,12 @@ impl App {
                 ],
             },
             api_key_dialog: None,
+            model_dialog: ModelDialogState {
+                selected_index: 0,
+                options: Vec::new(),
+                filter: String::new(),
+            },
+            model_fetch_rx: None,
             slash_suggestions: Vec::new(),
             slash_suggestion_index: None,
         }
@@ -368,6 +417,27 @@ impl App {
                 self.state = AppState::AskingPlanModeExit;
             }
 
+            if let Some(ref mut rx) = self.model_fetch_rx {
+                match rx.try_recv() {
+                    Ok(fetched) => {
+                        let current = self.model_name.clone();
+                        self.model_dialog.options = fetched;
+                        self.model_dialog.filter.clear();
+                        self.model_dialog.selected_index = self
+                            .model_dialog
+                            .options
+                            .iter()
+                            .position(|o| o.id == current)
+                            .unwrap_or(0);
+                        self.model_fetch_rx = None;
+                    }
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                        self.model_fetch_rx = None;
+                    }
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {}
+                }
+            }
+
             while let Ok(event) = self.event_rx.try_recv() {
                 match event {
                     AppEvent::Key(key) => self.handle_key(key).await?,
@@ -440,6 +510,65 @@ impl App {
                         });
                         self.state = AppState::EnteringApiKey;
                     }
+                }
+                _ => {}
+            }
+            return Ok(());
+        }
+
+        if self.state == AppState::SelectingModel {
+            match key.code {
+                KeyCode::Esc => {
+                    self.model_dialog.filter.clear();
+                    self.state = AppState::Running;
+                }
+                KeyCode::Up | KeyCode::BackTab => {
+                    self.model_dialog.selected_index =
+                        self.model_dialog.selected_index.saturating_sub(1);
+                }
+                KeyCode::Down | KeyCode::Tab => {
+                    let max = self.model_dialog.filtered_options().len().saturating_sub(1);
+                    self.model_dialog.selected_index =
+                        (self.model_dialog.selected_index + 1).min(max);
+                }
+                KeyCode::Home => {
+                    self.model_dialog.selected_index = 0;
+                }
+                KeyCode::End => {
+                    self.model_dialog.selected_index =
+                        self.model_dialog.filtered_options().len().saturating_sub(1);
+                }
+                KeyCode::Char('p')
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
+                    self.model_dialog.selected_index =
+                        self.model_dialog.selected_index.saturating_sub(1);
+                }
+                KeyCode::Char('n')
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                {
+                    let max = self.model_dialog.filtered_options().len().saturating_sub(1);
+                    self.model_dialog.selected_index =
+                        (self.model_dialog.selected_index + 1).min(max);
+                }
+                KeyCode::Enter => {
+                    let filtered = self.model_dialog.filtered_options();
+                    if let Some(selected) = filtered.get(self.model_dialog.selected_index) {
+                        let id = selected.id.clone();
+                        self.apply_model_selection(id).await;
+                    }
+                }
+                KeyCode::Backspace => {
+                    self.model_dialog.filter.pop();
+                    self.model_dialog.selected_index = 0;
+                }
+                KeyCode::Char(c) => {
+                    self.model_dialog.filter.push(c);
+                    self.model_dialog.selected_index = 0;
                 }
                 _ => {}
             }
@@ -789,12 +918,84 @@ impl App {
                             tool_info: None,
                         });
                     } else {
-                        let model = self.agent.lock().await.config.model.as_str().to_string();
-                        self.messages.push(ChatMessage {
-                            role: MessageRole::System,
-                            content: format!("Current model: {}", model),
-                            tool_info: None,
-                        });
+                        let entries = crate::model_picker::models_for_provider_from_registry(
+                            &self.provider_id,
+                            &self.model_registry,
+                        );
+                        let current = self.model_name.clone();
+                        let options: Vec<ModelOption> = entries
+                            .into_iter()
+                            .map(|e| ModelOption {
+                                id: e.id,
+                                label: e.display_name,
+                                description: e.description,
+                            })
+                            .collect();
+                        self.model_dialog.selected_index =
+                            options.iter().position(|o| o.id == current).unwrap_or(0);
+                        self.model_dialog.options = options;
+                        self.model_dialog.filter.clear();
+
+                        if let Ok(config) = load_config() {
+                            let base_url = config.api.base_url.clone();
+                            let api_key = config
+                                .api
+                                .auth_token
+                                .clone()
+                                .or_else(|| config.api.api_key.clone())
+                                .unwrap_or_default();
+                            let (tx, rx) = tokio::sync::mpsc::channel(1);
+                            self.model_fetch_rx = Some(rx);
+                            tokio::spawn(async move {
+                                let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
+                                let client = match reqwest::Client::builder()
+                                    .timeout(std::time::Duration::from_secs(10))
+                                    .build()
+                                {
+                                    Ok(c) => c,
+                                    Err(_) => return,
+                                };
+                                let resp = client.get(&url).bearer_auth(&api_key).send().await;
+                                if let Ok(r) = resp {
+                                    if let Ok(json) = r.json::<serde_json::Value>().await {
+                                        if let Some(data) =
+                                            json.get("data").and_then(|d| d.as_array())
+                                        {
+                                            let fetched: Vec<ModelOption> = data
+                                                .iter()
+                                                .filter_map(|m| {
+                                                    let id =
+                                                        m.get("id").and_then(|v| v.as_str())?;
+                                                    let name = m
+                                                        .get("name")
+                                                        .and_then(|v| v.as_str())
+                                                        .unwrap_or(id);
+                                                    let ctx = m
+                                                        .get("context_length")
+                                                        .and_then(|v| v.as_u64())
+                                                        .unwrap_or(0);
+                                                    let desc = if ctx > 0 {
+                                                        format!("{}K ctx", ctx / 1000)
+                                                    } else {
+                                                        String::new()
+                                                    };
+                                                    Some(ModelOption {
+                                                        id: id.to_string(),
+                                                        label: name.to_string(),
+                                                        description: desc,
+                                                    })
+                                                })
+                                                .collect();
+                                            if !fetched.is_empty() {
+                                                let _ = tx.send(fetched).await;
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }
+
+                        self.state = AppState::SelectingModel;
                     }
                 }
                 _ => {}
@@ -867,6 +1068,7 @@ impl App {
         agent.config.model = config.api.model.clone();
         self.model_name = config.api.model.as_str().to_string();
         self.provider_name = dialog.provider_label.clone();
+        self.provider_id = dialog.provider_id.clone();
 
         self.messages.push(ChatMessage {
             role: MessageRole::System,
@@ -878,6 +1080,23 @@ impl App {
         });
         self.state = AppState::Running;
         Ok(())
+    }
+
+    async fn apply_model_selection(&mut self, model_id: String) {
+        use piko_types::model::ModelId;
+        let model = ModelId::new(&model_id);
+        self.agent.lock().await.config.model = model.clone();
+        self.model_name = model.as_str().to_string();
+        if let Ok(mut config) = load_config() {
+            config.api.model = model.clone();
+            let _ = save_config(&config);
+        }
+        self.messages.push(ChatMessage {
+            role: MessageRole::System,
+            content: format!("Model set to {}", model.as_str()),
+            tool_info: None,
+        });
+        self.state = AppState::Running;
     }
 
     fn show_cost_summary(&mut self) {

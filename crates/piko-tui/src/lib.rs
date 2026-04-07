@@ -4,6 +4,7 @@ pub mod highlight;
 pub mod history;
 pub mod image_paste;
 pub mod input;
+pub mod model_picker;
 pub mod onboarding;
 pub mod render;
 pub mod slash_menu;

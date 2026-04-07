@@ -1,7 +1,7 @@
 # Spec: Hooks System
 
 **Status**: ❌ Todo
-**TS source**: `hooks/` (hook execution), `utils/hooks.ts`, spec: `claurst/spec/07_hooks.md`
+**TS source**: `hooks/` (hook execution), `utils/hooks.ts`
 
 ---
 

@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 use std::sync::atomic::Ordering;
@@ -106,6 +106,10 @@ pub fn render(frame: &mut Frame, app: &App) {
         AppState::EnteringApiKey => {
             render_input_bar(frame, app, chunks[2], t);
             render_api_key_dialog(frame, app, area, t);
+        }
+        AppState::SelectingModel => {
+            render_input_bar(frame, app, chunks[2], t);
+            render_model_dialog(frame, app, area, t);
         }
         _ => {
             render_input_bar(frame, app, chunks[2], t);
@@ -569,14 +573,8 @@ fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line
             for (i, line) in content.lines().enumerate() {
                 if i == 0 {
                     lines.push(Line::from(vec![
-                        Span::styled(
-                            format!("{} ", icon),
-                            Style::default().fg(color),
-                        ),
-                        Span::styled(
-                            line.to_string(),
-                            Style::default().fg(color),
-                        ),
+                        Span::styled(format!("{} ", icon), Style::default().fg(color)),
+                        Span::styled(line.to_string(), Style::default().fg(color)),
                     ]));
                 } else {
                     lines.push(Line::from(Span::styled(
@@ -784,6 +782,7 @@ fn current_spinner(app: &App, t: &Theme) -> (String, Color) {
         AppState::AskingPlanModeExit => ("◑".to_string(), Color::Yellow),
         AppState::SelectingProvider => ("⇄".to_string(), t.permission),
         AppState::EnteringApiKey => ("⌘".to_string(), t.permission),
+        AppState::SelectingModel => ("⊞".to_string(), t.claude),
         AppState::Exiting => ("·".to_string(), t.subtle),
     }
 }
@@ -1192,8 +1191,135 @@ fn render_plan_mode_exit_dialog(frame: &mut Frame, area: ratatui::layout::Rect, 
     );
 }
 
+fn render_model_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
+    let filtered = app.model_dialog.filtered_options();
+    let match_count = filtered.len();
+
+    // Dynamic height: fit content up to 75% of terminal height.
+    let max_height = (area.height as f32 * 0.75) as u16;
+    let content_h = ((match_count as u16) + 6).min(max_height).max(8);
+    let dialog = centered_rect(72, content_h, area);
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Block::default().style(Style::default().bg(Color::Rgb(0, 0, 0))),
+        area,
+    );
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(t.claude))
+        .title(Span::styled(
+            " Select a Model ",
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+        ));
+
+    // Inner area minus borders.
+    let inner_height = dialog.height.saturating_sub(2) as usize;
+
+    // ── Header (fixed, not scrolled) ──────────────────────────────────────────
+    let header_area = Rect {
+        x: dialog.x + 1,
+        y: dialog.y + 1,
+        width: dialog.width.saturating_sub(2),
+        height: 3,
+    };
+    let filter_display = if app.model_dialog.filter.is_empty() {
+        Span::styled("Search models…", Style::default().fg(t.subtle))
+    } else {
+        Span::styled(
+            format!("{}_", app.model_dialog.filter),
+            Style::default().fg(t.text),
+        )
+    };
+    let header_lines = vec![
+        Line::from(filter_display),
+        Line::from(Span::styled(
+            format!(
+                "{} model{}",
+                match_count,
+                if match_count == 1 { "" } else { "s" }
+            ),
+            Style::default().fg(t.inactive),
+        )),
+        Line::from(""),
+    ];
+    frame.render_widget(
+        Paragraph::new(header_lines).style(Style::default().bg(t.bg)),
+        header_area,
+    );
+
+    // ── Footer (fixed) ────────────────────────────────────────────────────────
+    let footer_area = Rect {
+        x: dialog.x + 1,
+        y: dialog.y + dialog.height.saturating_sub(2),
+        width: dialog.width.saturating_sub(2),
+        height: 1,
+    };
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "↑↓ navigate  Enter select  Esc cancel",
+            Style::default().fg(t.subtle),
+        )))
+        .style(Style::default().bg(t.bg)),
+        footer_area,
+    );
+
+    // ── Scrollable model list ─────────────────────────────────────────────────
+    let body_area = Rect {
+        x: dialog.x + 1,
+        y: dialog.y + 1 + 3,
+        width: dialog.width.saturating_sub(2),
+        height: inner_height.saturating_sub(3 + 1) as u16,
+    };
+
+    let mut model_lines: Vec<Line> = Vec::new();
+    for (idx, option) in filtered.iter().enumerate() {
+        let selected = idx == app.model_dialog.selected_index;
+        let marker = if selected { "›" } else { " " };
+        let name_style = if selected {
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(t.text)
+        };
+        let desc_style = if selected {
+            Style::default().fg(t.claude)
+        } else {
+            Style::default().fg(t.inactive)
+        };
+        model_lines.push(Line::from(vec![
+            Span::styled(format!("{marker} "), Style::default().fg(t.claude)),
+            Span::styled(option.label.clone(), name_style),
+            Span::raw("  "),
+            Span::styled(option.description.clone(), desc_style),
+        ]));
+    }
+
+    let visible = body_area.height as usize;
+    let selected = app.model_dialog.selected_index;
+    let scroll_y = if model_lines.len() <= visible {
+        0u16
+    } else if selected + 3 >= visible {
+        (selected + 3).saturating_sub(visible) as u16
+    } else {
+        0u16
+    };
+
+    frame.render_widget(
+        Paragraph::new(model_lines)
+            .style(Style::default().bg(t.bg))
+            .scroll((scroll_y, 0)),
+        body_area,
+    );
+
+    // Render the block border over everything.
+    frame.render_widget(block.style(Style::default().bg(t.bg)), dialog);
+}
+
 fn render_connect_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
     let dialog = centered_rect(64, 10, area);
+    frame.render_widget(Clear, area);
     frame.render_widget(
         Block::default().style(Style::default().bg(Color::Rgb(0, 0, 0))),
         area,
@@ -1255,6 +1381,7 @@ fn render_api_key_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Re
     };
 
     let dialog = centered_rect(64, 9, area);
+    frame.render_widget(Clear, area);
     frame.render_widget(
         Block::default().style(Style::default().bg(Color::Rgb(0, 0, 0))),
         area,
@@ -1266,9 +1393,7 @@ fn render_api_key_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Re
         .border_style(Style::default().fg(t.claude))
         .title(Span::styled(
             format!(" Connect {} ", dialog_state.provider_label),
-            Style::default()
-                .fg(t.claude)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
         ));
 
     let masked = if dialog_state.input.is_empty() {

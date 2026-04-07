@@ -47,7 +47,13 @@ async fn main() -> Result<()> {
         config.api.model = piko_types::model::ModelId::from_alias(model);
     }
 
-    let model_registry = ModelRegistry::new();
+    let mut model_registry = ModelRegistry::new();
+    // Load cached models.dev data (populated by background refresh on previous runs).
+    if let Some(cache) = models_cache_path() {
+        model_registry.load_cache(&cache);
+    }
+    // Spawn background refresh so the next run has fresh data.
+    spawn_models_cache_refresh();
     let inferred_provider = config.api.provider.clone().or_else(|| {
         model_registry
             .find_provider_for_model(config.api.model.as_str())
@@ -136,7 +142,7 @@ async fn main() -> Result<()> {
 
             agent = agent.with_session_store(store).with_session(session);
 
-            run_interactive(agent, &cli, &config).await
+            run_interactive(agent, &cli, &config, model_registry).await
         }
         Some(Commands::Continue) => {
             let agent_config = build_agent_config(&config, &cli, cwd.clone());
@@ -161,7 +167,7 @@ async fn main() -> Result<()> {
                 agent = agent.with_session_store(store).with_session(session);
             }
 
-            run_interactive(agent, &cli, &config).await
+            run_interactive(agent, &cli, &config, model_registry).await
         }
         None => {
             if let Some(ref prompt) = cli.print {
@@ -191,7 +197,7 @@ async fn main() -> Result<()> {
                     config.api.model.as_str(),
                 );
                 agent = agent.with_session_store(store).with_session(session);
-                run_interactive(agent, &cli, &config).await
+                run_interactive(agent, &cli, &config, model_registry).await
             }
         }
     }
@@ -201,18 +207,29 @@ async fn run_interactive(
     agent: Agent,
     cli: &Cli,
     config: &piko_config::config::PikoConfig,
+    model_registry: ModelRegistry,
 ) -> Result<()> {
     let mut skill_registry = SkillRegistry::with_built_ins();
     let _ = load_user_skills(&mut skill_registry);
     let dispatcher = SkillDispatcher::new(skill_registry);
 
     let budget = cli.max_budget_usd.or(config.api.max_budget_usd);
-    let provider_name = match config.api.provider.as_deref() {
-        Some("openai") => "OpenAI",
-        Some("openrouter") => "OpenRouter",
+    let provider_id = config.api.provider.as_deref().unwrap_or("anthropic");
+    let provider_name = match provider_id {
+        "openai" => "OpenAI",
+        "openrouter" => "OpenRouter",
+        "google" => "Google",
         _ => "Anthropic",
     };
-    let mut app = App::new(agent, dispatcher, &config.tui.theme, provider_name, budget);
+    let mut app = App::new(
+        agent,
+        dispatcher,
+        &config.tui.theme,
+        provider_name,
+        provider_id,
+        model_registry,
+        budget,
+    );
     app.run().await
 }
 
@@ -235,4 +252,42 @@ fn build_agent_config(
         extended_thinking,
         thinking_budget_tokens,
     }
+}
+
+fn models_cache_path() -> Option<PathBuf> {
+    directories::ProjectDirs::from("dev", "pikoclaw", "pikoclaw")
+        .map(|d| d.cache_dir().join("models.json"))
+}
+
+fn spawn_models_cache_refresh() {
+    let cache_path = match models_cache_path() {
+        Some(p) => p,
+        None => return,
+    };
+    tokio::spawn(async move {
+        let client = match reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+        {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let url = std::env::var("MODELS_DEV_URL")
+            .unwrap_or_else(|_| "https://models.dev/api.json".to_string());
+        if let Ok(resp) = client
+            .get(&url)
+            .header("User-Agent", "PikoClaw")
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                if let Ok(text) = resp.text().await {
+                    if let Some(parent) = cache_path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    let _ = std::fs::write(&cache_path, &text);
+                }
+            }
+        }
+    });
 }

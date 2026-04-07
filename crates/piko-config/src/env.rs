@@ -19,9 +19,7 @@ pub fn anthropic_model() -> Option<String> {
 }
 
 pub fn pikoclaw_provider() -> Option<String> {
-    env::var("PIKOCLAW_PROVIDER")
-        .ok()
-        .or_else(|| env::var("CLAURST_PROVIDER").ok())
+    env::var("PIKOCLAW_PROVIDER").ok()
 }
 
 /// Model override for the default Sonnet slot (mirrors claude-code's ANTHROPIC_DEFAULT_SONNET_MODEL).
