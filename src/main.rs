@@ -207,7 +207,12 @@ async fn run_interactive(
     let dispatcher = SkillDispatcher::new(skill_registry);
 
     let budget = cli.max_budget_usd.or(config.api.max_budget_usd);
-    let mut app = App::new(agent, dispatcher, &config.tui.theme, budget);
+    let provider_name = match config.api.provider.as_deref() {
+        Some("openai") => "OpenAI",
+        Some("openrouter") => "OpenRouter",
+        _ => "Anthropic",
+    };
+    let mut app = App::new(agent, dispatcher, &config.tui.theme, provider_name, budget);
     app.run().await
 }
 

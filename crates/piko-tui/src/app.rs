@@ -88,6 +88,8 @@ pub struct App {
     pub show_header: bool,
     /// Model name for header display.
     pub model_name: String,
+    /// Provider name for header display (e.g. "Anthropic", "OpenAI", "OpenRouter").
+    pub provider_name: String,
     /// Working directory for header display.
     pub cwd: String,
     /// Set when a 429 is received; cleared once the instant passes.
@@ -192,6 +194,7 @@ impl App {
         mut agent: Agent,
         dispatcher: SkillDispatcher,
         theme_name: &str,
+        provider_name: &str,
         max_budget_usd: Option<f64>,
     ) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
@@ -257,6 +260,7 @@ impl App {
             theme: theme::by_name(theme_name),
             show_header: true,
             model_name,
+            provider_name: provider_name.to_string(),
             cwd,
             rate_limit_until: None,
             history: InputHistory::new(),
@@ -721,6 +725,10 @@ impl App {
                         // Set a specific theme by name
                         let t = theme::by_name(name);
                         self.theme = t;
+                        if let Ok(mut config) = load_config() {
+                            config.tui.theme = t.name.to_string();
+                            let _ = save_config(&config);
+                        }
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!("Theme set to «{}»", t.label),
@@ -730,6 +738,10 @@ impl App {
                         // No arg → cycle to next theme
                         let t = theme::next(self.theme.name);
                         self.theme = t;
+                        if let Ok(mut config) = load_config() {
+                            config.tui.theme = t.name.to_string();
+                            let _ = save_config(&config);
+                        }
                         self.messages.push(ChatMessage {
                             role: MessageRole::System,
                             content: format!(
@@ -854,6 +866,7 @@ impl App {
         )?);
         agent.config.model = config.api.model.clone();
         self.model_name = config.api.model.as_str().to_string();
+        self.provider_name = dialog.provider_label.clone();
 
         self.messages.push(ChatMessage {
             role: MessageRole::System,

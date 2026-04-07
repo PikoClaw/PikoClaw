@@ -571,17 +571,17 @@ fn message_to_lines(msg: &ChatMessage, t: &Theme, area_width: usize) -> Vec<Line
                     lines.push(Line::from(vec![
                         Span::styled(
                             format!("{} ", icon),
-                            Style::default().fg(color).add_modifier(Modifier::DIM),
+                            Style::default().fg(color),
                         ),
                         Span::styled(
                             line.to_string(),
-                            Style::default().fg(color).add_modifier(Modifier::DIM),
+                            Style::default().fg(color),
                         ),
                     ]));
                 } else {
                     lines.push(Line::from(Span::styled(
                         format!("  {}", line),
-                        Style::default().fg(t.subtle).add_modifier(Modifier::DIM),
+                        Style::default().fg(t.inactive),
                     )));
                 }
             }
@@ -633,8 +633,10 @@ fn system_icon(content: &str, t: &Theme) -> (&'static str, Color) {
         ("◉", t.subtle)
     } else if content.starts_with("Q:") || content.starts_with("Commands:") {
         ("›", t.inactive)
+    } else if content.starts_with("Connected to") {
+        ("✓", t.success)
     } else {
-        ("·", t.subtle)
+        ("·", t.inactive)
     }
 }
 
@@ -1261,11 +1263,11 @@ fn render_api_key_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Re
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(t.permission))
+        .border_style(Style::default().fg(t.claude))
         .title(Span::styled(
             format!(" Connect {} ", dialog_state.provider_label),
             Style::default()
-                .fg(t.permission)
+                .fg(t.claude)
                 .add_modifier(Modifier::BOLD),
         ));
 
@@ -1288,7 +1290,7 @@ fn render_api_key_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Re
                     Style::default().fg(t.text)
                 },
             ),
-            Span::styled("█", Style::default().fg(t.permission)),
+            Span::styled("█", Style::default().fg(t.claude)),
         ]),
         Line::from(""),
         Line::from(Span::styled(
@@ -1340,7 +1342,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(outer_block, area);
 
     if width >= 70 {
-        let left_width = 38u16;
+        let left_width = 48u16;
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(left_width), Constraint::Min(1)])
@@ -1375,7 +1377,10 @@ fn render_header_left(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(""),
         Line::from(vec![
             Span::styled(&app.model_name, Style::default().fg(t.inactive)),
-            Span::styled(" · Claude API", Style::default().fg(t.inactive)),
+            Span::styled(
+                format!(" · {}", app.provider_name),
+                Style::default().fg(t.inactive),
+            ),
         ]),
         Line::from(Span::styled(&app.cwd, Style::default().fg(t.inactive))),
     ];
@@ -1428,6 +1433,10 @@ fn render_header_right(frame: &mut Frame, area: Rect, app: &App) {
         )),
         Line::from(Span::styled(
             "Use /model <name> to switch models",
+            Style::default().fg(t.text),
+        )),
+        Line::from(Span::styled(
+            "Use /connect to switch to a different LLM provider",
             Style::default().fg(t.text),
         )),
         Line::from(""),
