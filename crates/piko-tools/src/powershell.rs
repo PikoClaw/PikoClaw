@@ -41,7 +41,7 @@ fn default_timeout() -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Inline risk classifier 
+// Inline risk classifier
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
