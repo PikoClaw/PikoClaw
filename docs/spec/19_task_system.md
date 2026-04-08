@@ -1,6 +1,6 @@
 # Spec: Background Task System
 
-**Status**: ❌ Todo
+**Status**: ✅ Done
 **TS source**: `tools/TaskCreateTool.tsx`, `tools/TaskGetTool.tsx`, etc., `tasks/`
 
 ---

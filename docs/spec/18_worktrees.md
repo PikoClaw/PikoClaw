@@ -1,6 +1,6 @@
 # Spec: Git Worktree Tools
 
-**Status**: ❌ Todo
+**Status**: ✅ Done
 **TS source**: `tools/EnterWorktreeTool.tsx`, `tools/ExitWorktreeTool.tsx`
 
 ---

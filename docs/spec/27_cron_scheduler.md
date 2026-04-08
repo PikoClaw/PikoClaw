@@ -1,6 +1,6 @@
 # Spec: Cron Scheduler & Remote Triggers
 
-**Status**: ❌ Todo
+**Status**: ✅ Done
 **TS source**: `utils/cron.ts`, `utils/cronTasks.ts`, `tools/CronCreateTool.tsx`, `tools/RemoteTriggerTool.tsx`
 
 ---

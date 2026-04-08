@@ -1,6 +1,6 @@
 # Spec: Advanced Tools
 
-**Status**: ✅ Done (core set + plan mode); ❌ Missing (task system, worktrees, cron)
+**Status**: ✅ Done
 **Rust crate**: `piko-tools`, `piko-agent`
 **TS source**: `tools/AgentTool.tsx`, `tools/NotebookEditTool.tsx`, `tools/AskUserQuestionTool.tsx`, `tools/TodoWriteTool.tsx`
 
@@ -79,21 +79,8 @@ Input: {
 Output: string (confirmation)
 ```
 
----
-
-## Not Yet Implemented
-
-### EnterPlanModeTool / ExitPlanModeTool ❌
-Read-only "plan" mode: agent may only read files and call tools that don't modify state. No bash writes, no file writes. User must explicitly approve exiting plan mode.
-See: [17_plan_mode.md](17_plan_mode.md)
-
-```
-EnterPlanMode: Input: {} → Output: string (confirmation, sets plan_mode=true on context)
-ExitPlanMode:  Input: {} → Output: string (asks user approval in TUI)
-```
-
-### TaskCreateTool / TaskGetTool / TaskListTool / TaskUpdateTool / TaskOutputTool / TaskStopTool ❌
-Background task system (V2). Tasks run as independent agents in background threads/processes.
+### TaskCreateTool / TaskGetTool / TaskListTool / TaskUpdateTool / TaskOutputTool / TaskStopTool ✅
+Background task system. Tasks run as independent agents in background threads/processes.
 See: [19_task_system.md](19_task_system.md)
 
 ```
@@ -105,13 +92,34 @@ TaskOutput: { task_id }  → string (streamed output so far)
 TaskStop:   { task_id }  → confirmation
 ```
 
-### EnterWorktreeTool / ExitWorktreeTool ❌
+### EnterWorktreeTool / ExitWorktreeTool ✅
 Creates a temporary git worktree for isolated changes. Agent works in the worktree; changes can be merged back or discarded.
 See: [18_worktrees.md](18_worktrees.md)
 
 ```
 EnterWorktree: { description?, branch? } → { worktree_path, branch_name }
 ExitWorktree:  { cleanup: bool }         → confirmation (optionally deletes worktree)
+```
+
+### CronCreateTool / CronDeleteTool / CronListTool ✅
+Schedule recurring agent tasks.
+See: [27_cron_scheduler.md](27_cron_scheduler.md)
+
+### RemoteTriggerTool ✅
+Dispatch a named event to trigger a remote or background agent session.
+See: [27_cron_scheduler.md](27_cron_scheduler.md)
+
+---
+
+## Not Yet Implemented
+
+### EnterPlanModeTool / ExitPlanModeTool ❌
+Read-only "plan" mode: agent may only read files and call tools that don't modify state. No bash writes, no file writes. User must explicitly approve exiting plan mode.
+See: [17_plan_mode.md](17_plan_mode.md)
+
+```
+EnterPlanMode: Input: {} → Output: string (confirmation, sets plan_mode=true on context)
+ExitPlanMode:  Input: {} → Output: string (asks user approval in TUI)
 ```
 
 ### ListMcpResourcesTool / ReadMcpResourceTool ❌
@@ -130,11 +138,3 @@ Invokes user-defined skills (markdown prompt templates) from within agent contex
 Input: { skill: string, args?: string }
 Output: string (result of skill execution)
 ```
-
-### CronCreateTool / CronDeleteTool / CronListTool ❌
-Schedule recurring agent tasks.
-See: [27_cron_scheduler.md](27_cron_scheduler.md)
-
-### RemoteTriggerTool ❌
-Trigger remote scheduled agents.
-See: [27_cron_scheduler.md](27_cron_scheduler.md)

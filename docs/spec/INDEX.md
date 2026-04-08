@@ -16,8 +16,8 @@ Each file is a dedicated spec for one feature area with implementation todos.
 |------|---------|--------|
 | [01_api_client.md](01_api_client.md) | Anthropic API Client & Streaming | ✅ Done |
 | [02_core_agent_loop.md](02_core_agent_loop.md) | Core Agent Loop & Turn Execution | ✅ Done |
-| [03_tools_builtin.md](03_tools_builtin.md) | Built-in Tools (Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch) | ✅ Done |
-| [04_tools_advanced.md](04_tools_advanced.md) | Advanced Tools (Agent, NotebookEdit, AskUser, TodoWrite) | 🔶 Partial |
+| [03_tools_builtin.md](03_tools_builtin.md) | Built-in Tools (File & Shell, Web, Tasks, Agent, Worktrees) | ✅ Done |
+| [04_tools_advanced.md](04_tools_advanced.md) | Advanced Tools (Agent, NotebookEdit, AskUser, TodoWrite, Tasks, Worktrees, Cron) | ✅ Done |
 | [05_permissions.md](05_permissions.md) | Permission System | 🔶 Partial |
 | [06_session_persistence.md](06_session_persistence.md) | Session Persistence & Management | 🔶 Partial |
 | [07_tui.md](07_tui.md) | Terminal UI (TUI) | 🔶 Partial |
@@ -31,8 +31,8 @@ Each file is a dedicated spec for one feature area with implementation todos.
 | [15_image_input.md](15_image_input.md) | Image & Screenshot Input | 🔶 Partial |
 | [16_memory_memdir.md](16_memory_memdir.md) | Memory / Memdir System | ❌ Todo |
 | [17_plan_mode.md](17_plan_mode.md) | Plan Mode (EnterPlan/ExitPlan tools) | ✅ Done |
-| [18_worktrees.md](18_worktrees.md) | Git Worktree Tools | ❌ Todo |
-| [19_task_system.md](19_task_system.md) | Background Task System (TaskCreate/Get/List/etc.) | ❌ Todo |
+| [18_worktrees.md](18_worktrees.md) | Git Worktree Tools | ✅ Done |
+| [19_task_system.md](19_task_system.md) | Background Task System (TaskCreate/Get/List/etc.) | ✅ Done |
 | [20_auto_compact.md](20_auto_compact.md) | Auto-Compact / Context Summarization | 🔶 Partial |
 | [21_multi_agent.md](21_multi_agent.md) | Multi-Agent / Coordinator / Swarm | 🔶 Partial |
 | [22_ide_integration.md](22_ide_integration.md) | IDE Integration (VS Code / JetBrains) | ❌ Todo |
@@ -40,7 +40,7 @@ Each file is a dedicated spec for one feature area with implementation todos.
 | [24_voice_input.md](24_voice_input.md) | Voice Input (STT) | ❌ Todo |
 | [25_plugins.md](25_plugins.md) | Plugin System & Marketplace | ❌ Todo |
 | [26_output_styles.md](26_output_styles.md) | Configurable Output Styles | ❌ Todo |
-| [27_cron_scheduler.md](27_cron_scheduler.md) | Cron Scheduler & Remote Triggers | ❌ Todo |
+| [27_cron_scheduler.md](27_cron_scheduler.md) | Cron Scheduler & Remote Triggers | ✅ Done |
 | [28_mcp_resources.md](28_mcp_resources.md) | MCP Resource Reading (List/Read) | ✅ Done |
 | [29_session_commands.md](29_session_commands.md) | Session List & Management Commands | ❌ Todo |
 | [30_system_prompt_architecture.md](30_system_prompt_architecture.md) | System Prompt Assembly & Sections | 🔶 Partial |
