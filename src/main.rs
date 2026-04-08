@@ -118,8 +118,7 @@ async fn main() -> Result<()> {
         match run_provider_picker(&config.tui.theme)? {
             ProviderChoice::Anthropic => {
                 let tokens = piko_oauth::run_login_flow().await?;
-                let use_bearer =
-                    tokens.refresh_token.is_some() || tokens.expires_at_ms != u64::MAX;
+                let use_bearer = tokens.refresh_token.is_some() || tokens.expires_at_ms != u64::MAX;
                 (tokens.access_token, use_bearer)
             }
             ProviderChoice::ApiKey {

@@ -14,19 +14,34 @@ pub enum ProviderChoice {
 
 impl ProviderChoice {
     pub fn provider_id(&self) -> Option<&str> {
-        match self { Self::ApiKey { provider_id, .. } => Some(provider_id), _ => None }
+        match self {
+            Self::ApiKey { provider_id, .. } => Some(provider_id),
+            _ => None,
+        }
     }
     pub fn provider_label(&self) -> Option<&str> {
-        match self { Self::ApiKey { provider_label, .. } => Some(provider_label), _ => None }
+        match self {
+            Self::ApiKey { provider_label, .. } => Some(provider_label),
+            _ => None,
+        }
     }
     pub fn base_url(&self) -> Option<&str> {
-        match self { Self::ApiKey { base_url, .. } => Some(base_url), _ => None }
+        match self {
+            Self::ApiKey { base_url, .. } => Some(base_url),
+            _ => None,
+        }
     }
     pub fn api_key(&self) -> Option<&str> {
-        match self { Self::ApiKey { api_key, .. } => Some(api_key), _ => None }
+        match self {
+            Self::ApiKey { api_key, .. } => Some(api_key),
+            _ => None,
+        }
     }
     pub fn use_bearer(&self) -> bool {
-        match self { Self::ApiKey { use_bearer, .. } => *use_bearer, _ => false }
+        match self {
+            Self::ApiKey { use_bearer, .. } => *use_bearer,
+            _ => false,
+        }
     }
 }
 
@@ -85,7 +100,10 @@ pub fn run_provider_picker(theme_name: &str) -> Result<ProviderChoice> {
     let mut terminal = Terminal::new(backend)?;
 
     #[derive(PartialEq)]
-    enum Screen { SelectProvider, EnterKey }
+    enum Screen {
+        SelectProvider,
+        EnterKey,
+    }
 
     let mut screen = Screen::SelectProvider;
     let mut selected: usize = 0;
@@ -96,15 +114,16 @@ pub fn run_provider_picker(theme_name: &str) -> Result<ProviderChoice> {
         let ki = key_input.clone();
         match screen {
             Screen::SelectProvider => terminal.draw(|f| draw_provider_list(f, t, sel))?,
-            Screen::EnterKey      => terminal.draw(|f| draw_key_entry(f, t, &PROVIDERS[sel], &ki))?,
+            Screen::EnterKey => terminal.draw(|f| draw_key_entry(f, t, &PROVIDERS[sel], &ki))?,
         };
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 match screen {
                     Screen::SelectProvider => match (key.code, key.modifiers) {
-                        (KeyCode::Char('c'), KeyModifiers::CONTROL)
-                        | (KeyCode::Esc, _) => break ProviderChoice::Anthropic,
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Esc, _) => {
+                            break ProviderChoice::Anthropic
+                        }
                         (KeyCode::Up, _) | (KeyCode::Char('k'), KeyModifiers::NONE) => {
                             selected = selected.saturating_sub(1);
                         }
@@ -124,12 +143,16 @@ pub fn run_provider_picker(theme_name: &str) -> Result<ProviderChoice> {
                         _ => {}
                     },
                     Screen::EnterKey => match (key.code, key.modifiers) {
-                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => break ProviderChoice::Anthropic,
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                            break ProviderChoice::Anthropic
+                        }
                         (KeyCode::Esc, _) => {
                             screen = Screen::SelectProvider;
                             key_input.clear();
                         }
-                        (KeyCode::Backspace, _) => { key_input.pop(); }
+                        (KeyCode::Backspace, _) => {
+                            key_input.pop();
+                        }
                         (KeyCode::Enter, _) => {
                             let k = key_input.trim().to_string();
                             if !k.is_empty() {
@@ -143,7 +166,9 @@ pub fn run_provider_picker(theme_name: &str) -> Result<ProviderChoice> {
                                 };
                             }
                         }
-                        (KeyCode::Char(c), _) => { key_input.push(c); }
+                        (KeyCode::Char(c), _) => {
+                            key_input.push(c);
+                        }
                         _ => {}
                     },
                 }
@@ -176,13 +201,21 @@ fn draw_provider_list(frame: &mut Frame, t: &crate::theme::Theme, selected: usiz
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(t.claude))
         .title(Line::from(vec![
-            Span::styled(" pikoclaw ", Style::default().fg(t.claude).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " pikoclaw ",
+                Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("— choose a provider ", Style::default().fg(t.inactive)),
         ]))
         .style(Style::default().bg(t.bg));
     frame.render_widget(outer, dialog);
 
-    let inner = Rect::new(dialog.x + 2, dialog.y + 2, dialog.width.saturating_sub(4), dialog.height.saturating_sub(4));
+    let inner = Rect::new(
+        dialog.x + 2,
+        dialog.y + 2,
+        dialog.width.saturating_sub(4),
+        dialog.height.saturating_sub(4),
+    );
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -194,46 +227,69 @@ fn draw_provider_list(frame: &mut Frame, t: &crate::theme::Theme, selected: usiz
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("No credentials found. ", Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
-            Span::styled("Select a provider to get started.", Style::default().fg(t.inactive)),
+            Span::styled(
+                "No credentials found. ",
+                Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "Select a provider to get started.",
+                Style::default().fg(t.inactive),
+            ),
         ])),
         chunks[0],
     );
 
-    let items: Vec<ListItem> = PROVIDERS.iter().enumerate().map(|(i, p)| {
-        let is_sel = i == selected;
-        let prefix = if is_sel { "❯ " } else { "  " };
-        let name_style = if is_sel {
-            Style::default().fg(t.claude).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.text)
-        };
-        let desc_style = if is_sel {
-            Style::default().fg(t.claude)
-        } else {
-            Style::default().fg(t.inactive)
-        };
-        ListItem::new(Line::from(vec![
-            Span::styled(prefix, name_style),
-            Span::styled(p.label, name_style),
-            Span::raw("  "),
-            Span::styled(p.description, desc_style),
-        ]))
-    }).collect();
+    let items: Vec<ListItem> = PROVIDERS
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let is_sel = i == selected;
+            let prefix = if is_sel { "❯ " } else { "  " };
+            let name_style = if is_sel {
+                Style::default().fg(t.claude).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text)
+            };
+            let desc_style = if is_sel {
+                Style::default().fg(t.claude)
+            } else {
+                Style::default().fg(t.inactive)
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(prefix, name_style),
+                Span::styled(p.label, name_style),
+                Span::raw("  "),
+                Span::styled(p.description, desc_style),
+            ]))
+        })
+        .collect();
     frame.render_widget(List::new(items), chunks[1]);
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("↑↓", Style::default().fg(t.permission).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "↑↓",
+                Style::default()
+                    .fg(t.permission)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" navigate  ", Style::default().fg(t.subtle)),
-            Span::styled("Enter", Style::default().fg(t.success).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default().fg(t.success).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" select", Style::default().fg(t.subtle)),
         ])),
         chunks[2],
     );
 }
 
-fn draw_key_entry(frame: &mut Frame, t: &crate::theme::Theme, provider: &ProviderOption, input: &str) {
+fn draw_key_entry(
+    frame: &mut Frame,
+    t: &crate::theme::Theme,
+    provider: &ProviderOption,
+    input: &str,
+) {
     let full = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(t.bg)), full);
 
@@ -249,20 +305,34 @@ fn draw_key_entry(frame: &mut Frame, t: &crate::theme::Theme, provider: &Provide
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(t.claude))
-        .title(Line::from(vec![
-            Span::styled(format!(" Connect {} ", provider.label), Style::default().fg(t.claude).add_modifier(Modifier::BOLD)),
-        ]))
+        .title(Line::from(vec![Span::styled(
+            format!(" Connect {} ", provider.label),
+            Style::default().fg(t.claude).add_modifier(Modifier::BOLD),
+        )]))
         .style(Style::default().bg(t.bg));
     frame.render_widget(outer, dialog);
 
-    let inner = Rect::new(dialog.x + 2, dialog.y + 2, dialog.width.saturating_sub(4), dialog.height.saturating_sub(4));
+    let inner = Rect::new(
+        dialog.x + 2,
+        dialog.y + 2,
+        dialog.width.saturating_sub(4),
+        dialog.height.saturating_sub(4),
+    );
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Length(1), Constraint::Length(2), Constraint::Min(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(2),
+            Constraint::Min(1),
+        ])
         .split(inner);
 
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled("Paste your API key and press Enter:", Style::default().fg(t.inactive)))),
+        Paragraph::new(Line::from(Span::styled(
+            "Paste your API key and press Enter:",
+            Style::default().fg(t.inactive),
+        ))),
         chunks[0],
     );
 
@@ -270,19 +340,38 @@ fn draw_key_entry(frame: &mut Frame, t: &crate::theme::Theme, provider: &Provide
         String::new()
     } else {
         let visible_end = input.len().min(6);
-        format!("{}{}", &input[..visible_end], "•".repeat(input.len().saturating_sub(visible_end)))
+        format!(
+            "{}{}",
+            &input[..visible_end],
+            "•".repeat(input.len().saturating_sub(visible_end))
+        )
     };
-    let display = if masked.is_empty() { "▌".to_string() } else { format!("{}_", masked) };
+    let display = if masked.is_empty() {
+        "▌".to_string()
+    } else {
+        format!("{}_", masked)
+    };
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(display, Style::default().fg(t.text).add_modifier(Modifier::BOLD)))),
+        Paragraph::new(Line::from(Span::styled(
+            display,
+            Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+        ))),
         chunks[1],
     );
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("Enter", Style::default().fg(t.success).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Enter",
+                Style::default().fg(t.success).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" confirm  ", Style::default().fg(t.subtle)),
-            Span::styled("Esc", Style::default().fg(t.permission).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Esc",
+                Style::default()
+                    .fg(t.permission)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" back", Style::default().fg(t.subtle)),
         ])),
         chunks[3],

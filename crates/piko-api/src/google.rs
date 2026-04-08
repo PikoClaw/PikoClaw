@@ -11,7 +11,9 @@
 use crate::error::ApiError;
 use crate::request::MessagesRequest;
 use crate::response::{MessagesResponse, StopReason, Usage};
-use crate::stream::{Delta, DeltaUsage, EventStream, MessageDeltaData, MessageStartData, StreamEvent};
+use crate::stream::{
+    Delta, DeltaUsage, EventStream, MessageDeltaData, MessageStartData, StreamEvent,
+};
 use futures_util::StreamExt;
 use piko_types::message::{ContentBlock, ImageSource, ToolResultContent};
 use piko_types::Role;
@@ -43,16 +45,28 @@ impl GoogleClient {
     }
 
     fn supports_thinking(model: &str) -> bool {
-        model.contains("2.5") || model.contains("3.0") || model.contains("3.1")
+        model.contains("2.5")
+            || model.contains("3.0")
+            || model.contains("3.1")
             || model.contains("gemini-3")
     }
 
     fn tool_use_id_for_name(name: &str, occurrence: usize) -> String {
         let sanitized: String = name
             .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' { ch } else { '_' })
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                    ch
+                } else {
+                    '_'
+                }
+            })
             .collect();
-        let base = if sanitized.is_empty() { "tool" } else { sanitized.as_str() };
+        let base = if sanitized.is_empty() {
+            "tool"
+        } else {
+            sanitized.as_str()
+        };
         if occurrence == 0 {
             format!("call_{}", base)
         } else {
@@ -60,7 +74,9 @@ impl GoogleClient {
         }
     }
 
-    fn tool_name_by_id(messages: &[piko_types::Message]) -> std::collections::HashMap<String, String> {
+    fn tool_name_by_id(
+        messages: &[piko_types::Message],
+    ) -> std::collections::HashMap<String, String> {
         let mut map = std::collections::HashMap::new();
         for msg in messages {
             for block in &msg.content {
@@ -83,7 +99,11 @@ impl GoogleClient {
         } else {
             raw
         };
-        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
     }
 
     fn content_block_to_part(block: &ContentBlock) -> Option<Value> {
@@ -121,7 +141,13 @@ impl GoogleClient {
             ToolResultContent::Blocks(blocks) => {
                 let text: String = blocks
                     .iter()
-                    .filter_map(|b| if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None })
+                    .filter_map(|b| {
+                        if let ContentBlock::Text { text } = b {
+                            Some(text.as_str())
+                        } else {
+                            None
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join("\n");
                 json!({ "content": text })
@@ -151,8 +177,10 @@ impl GoogleClient {
 
                 if let Some(Value::Array(enum_vals)) = map.get("enum") {
                     if enum_vals.iter().any(|v| v.is_number()) {
-                        let string_enums: Vec<Value> =
-                            enum_vals.iter().map(|v| Value::String(v.to_string())).collect();
+                        let string_enums: Vec<Value> = enum_vals
+                            .iter()
+                            .map(|v| Value::String(v.to_string()))
+                            .collect();
                         map.insert("enum".to_string(), Value::Array(string_enums));
                         map.insert("type".to_string(), Value::String("string".to_string()));
                     }
@@ -167,19 +195,17 @@ impl GoogleClient {
                         *props = sanitized_props;
                     }
 
-                    if let Some(required) = map.get("required").cloned() {
-                        if let Value::Array(req_arr) = required {
-                            let prop_keys: std::collections::HashSet<String> = map
-                                .get("properties")
-                                .and_then(|p| p.as_object())
-                                .map(|o| o.keys().cloned().collect())
-                                .unwrap_or_default();
-                            let filtered: Vec<Value> = req_arr
-                                .into_iter()
-                                .filter(|v| v.as_str().map(|s| prop_keys.contains(s)).unwrap_or(false))
-                                .collect();
-                            map.insert("required".to_string(), Value::Array(filtered));
-                        }
+                    if let Some(Value::Array(req_arr)) = map.get("required").cloned() {
+                        let prop_keys: std::collections::HashSet<String> = map
+                            .get("properties")
+                            .and_then(|p| p.as_object())
+                            .map(|o| o.keys().cloned().collect())
+                            .unwrap_or_default();
+                        let filtered: Vec<Value> = req_arr
+                            .into_iter()
+                            .filter(|v| v.as_str().map(|s| prop_keys.contains(s)).unwrap_or(false))
+                            .collect();
+                        map.insert("required".to_string(), Value::Array(filtered));
                     }
                 } else {
                     map.remove("properties");
@@ -190,7 +216,10 @@ impl GoogleClient {
                     if let Some(items) = map.get_mut("items") {
                         if let Value::Object(ref mut items_map) = items {
                             if !items_map.contains_key("type") {
-                                items_map.insert("type".to_string(), Value::String("string".to_string()));
+                                items_map.insert(
+                                    "type".to_string(),
+                                    Value::String("string".to_string()),
+                                );
                             }
                             let sanitized = Self::sanitize_schema(Value::Object(items_map.clone()));
                             *items = sanitized;
@@ -218,9 +247,16 @@ impl GoogleClient {
             let mut tool_result_parts: Vec<Value> = Vec::new();
 
             for block in &msg.content {
-                if let ContentBlock::ToolResult { tool_use_id, content, .. } = block {
+                if let ContentBlock::ToolResult {
+                    tool_use_id,
+                    content,
+                    ..
+                } = block
+                {
                     if !regular_parts.is_empty() {
-                        contents.push(json!({ "role": role, "parts": regular_parts.drain(..).collect::<Vec<_>>() }));
+                        contents.push(
+                            json!({ "role": role, "parts": std::mem::take(&mut regular_parts) }),
+                        );
                     }
                     let tool_name = tool_name_by_id
                         .get(tool_use_id)
@@ -230,7 +266,7 @@ impl GoogleClient {
                     tool_result_parts.push(Self::tool_result_to_part(&tool_name, content));
                 } else if let Some(part) = Self::content_block_to_part(block) {
                     if !tool_result_parts.is_empty() {
-                        contents.push(json!({ "role": "user", "parts": tool_result_parts.drain(..).collect::<Vec<_>>() }));
+                        contents.push(json!({ "role": "user", "parts": std::mem::take(&mut tool_result_parts) }));
                     }
                     regular_parts.push(part);
                 }
@@ -245,7 +281,11 @@ impl GoogleClient {
         }
 
         let system_instruction: Option<Value> = request.system.as_ref().map(|blocks| {
-            let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join("\n");
+            let text = blocks
+                .iter()
+                .map(|b| b.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
             json!({ "parts": [{ "text": text }] })
         });
 
@@ -273,10 +313,13 @@ impl GoogleClient {
         if let Some(thinking) = &request.thinking {
             let model_str = request.model.to_string();
             if Self::supports_thinking(&model_str) {
-                gen_config.insert("thinkingConfig".to_string(), json!({
-                    "includeThoughts": true,
-                    "thinkingBudget": thinking.budget_tokens
-                }));
+                gen_config.insert(
+                    "thinkingConfig".to_string(),
+                    json!({
+                        "includeThoughts": true,
+                        "thinkingBudget": thinking.budget_tokens
+                    }),
+                );
             }
         }
 
@@ -335,14 +378,27 @@ impl GoogleClient {
             for part in parts {
                 if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
                     if !text.is_empty() {
-                        content.push(ContentBlock::Text { text: text.to_string() });
+                        content.push(ContentBlock::Text {
+                            text: text.to_string(),
+                        });
                     }
                 } else if let Some(fc) = part.get("functionCall") {
-                    let name = fc.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                    let name = fc
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let args = fc.get("args").cloned().unwrap_or(json!({}));
-                    let occurrence = tool_name_counts.entry(name.clone()).and_modify(|c| *c += 1).or_insert(0);
+                    let occurrence = tool_name_counts
+                        .entry(name.clone())
+                        .and_modify(|c| *c += 1)
+                        .or_insert(0);
                     let id = Self::tool_use_id_for_name(&name, *occurrence);
-                    content.push(ContentBlock::ToolUse { id, name, input: args });
+                    content.push(ContentBlock::ToolUse {
+                        id,
+                        name,
+                        input: args,
+                    });
                 }
             }
         }
