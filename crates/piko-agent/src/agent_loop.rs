@@ -6,7 +6,7 @@ use futures_util::StreamExt;
 use piko_api::error::ApiError;
 use piko_api::request::MessagesRequest;
 use piko_api::stream::{Delta, StreamEvent};
-use piko_api::AnthropicClient;
+use piko_api::ApiClient;
 use piko_permissions::checker::{PermissionChecker, PermissionDecision, PermissionRequest};
 use piko_tools::registry::ToolRegistry;
 use piko_tools::tool_trait::ToolContext;
@@ -21,7 +21,7 @@ const PLAN_MODE_BLOCKED: &[&str] = &["bash", "file_write", "file_edit", "noteboo
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run_turn(
-    client: &AnthropicClient,
+    client: &ApiClient,
     tools: &ToolRegistry,
     permissions: &dyn PermissionChecker,
     context: &mut ConversationContext,

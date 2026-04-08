@@ -19,3 +19,4 @@ tracing.workspace = true
 piko-types.workspace = true
 piko-config.workspace = true
 async-stream = "0.3"
+uuid = { workspace = true }

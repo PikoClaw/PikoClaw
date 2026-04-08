@@ -18,7 +18,7 @@ use crossterm::terminal::{
 use crossterm::ExecutableCommand;
 use piko_agent::agent::Agent;
 use piko_agent::output::{AgentEvent, OutputSink};
-use piko_api::{AnthropicClient, ModelRegistry};
+use piko_api::ModelRegistry;
 use piko_config::config::PermissionsConfig;
 use piko_config::loader::{load_config, save_config};
 use piko_permissions::checker::PermissionDecision;
@@ -327,6 +327,11 @@ impl App {
                         id: "openai",
                         label: "OpenAI",
                         description: "GPT models via OpenAI API key",
+                    },
+                    ConnectProviderOption {
+                        id: "google",
+                        label: "Google",
+                        description: "Gemini models via Google AI API key",
                     },
                     ConnectProviderOption {
                         id: "openrouter",
@@ -1048,6 +1053,11 @@ impl App {
                 config.api.api_key = Some(key.clone());
                 config.api.auth_token = None;
             }
+            "google" => {
+                config.api.base_url = "https://generativelanguage.googleapis.com".to_string();
+                config.api.api_key = Some(key.clone());
+                config.api.auth_token = None;
+            }
             "openrouter" => {
                 config.api.base_url = "https://openrouter.ai/api".to_string();
                 config.api.auth_token = Some(key.clone());
@@ -1056,25 +1066,37 @@ impl App {
             _ => {}
         }
 
+        let default_model = self
+            .model_registry
+            .best_model_for_provider(&dialog.provider_id)
+            .map(|m| piko_types::model::ModelId::new(&m))
+            .unwrap_or_else(|| config.api.model.clone());
+
+        config.api.model = default_model.clone();
         save_config(&config)?;
 
         let mut agent = self.agent.lock().await;
-        agent.client = Arc::new(AnthropicClient::with_options(
-            key,
-            config.api.base_url.clone(),
-            config.api.auth_token.is_some() || dialog.provider_id == "openai",
-            Some(dialog.provider_id.as_str()),
-        )?);
-        agent.config.model = config.api.model.clone();
-        self.model_name = config.api.model.as_str().to_string();
+        agent.client = Arc::new(if dialog.provider_id == "google" {
+            piko_api::ApiClient::google(key)
+        } else {
+            piko_api::ApiClient::anthropic(
+                key,
+                config.api.base_url.clone(),
+                config.api.auth_token.is_some() || dialog.provider_id == "openai",
+                Some(dialog.provider_id.as_str()),
+            )?
+        });
+        agent.config.model = default_model.clone();
+        self.model_name = default_model.as_str().to_string();
         self.provider_name = dialog.provider_label.clone();
         self.provider_id = dialog.provider_id.clone();
 
         self.messages.push(ChatMessage {
             role: MessageRole::System,
             content: format!(
-                "Connected to {}. Use /model to choose a model if needed.",
-                dialog.provider_label
+                "Connected to {} with model {}.",
+                dialog.provider_label,
+                default_model.as_str()
             ),
             tool_info: None,
         });

@@ -2,7 +2,7 @@ use crate::agent_loop::run_turn;
 use crate::context::ConversationContext;
 use crate::output::{OutputSink, StdoutSink};
 use anyhow::Result;
-use piko_api::AnthropicClient;
+use piko_api::ApiClient;
 use piko_config::config::PikoConfig;
 use piko_permissions::checker::PermissionChecker;
 use piko_permissions::default::DefaultPermissionChecker;
@@ -45,7 +45,7 @@ impl AgentConfig {
 
 pub struct Agent {
     pub config: AgentConfig,
-    pub client: Arc<AnthropicClient>,
+    pub client: Arc<ApiClient>,
     pub tools: Arc<ToolRegistry>,
     pub permissions: Arc<dyn PermissionChecker>,
     pub session_store: Option<Arc<dyn SessionStore>>,
@@ -67,12 +67,12 @@ impl Agent {
         use_bearer_auth: bool,
         provider: Option<&str>,
     ) -> Result<Self> {
-        let client = Arc::new(AnthropicClient::with_options(
-            credential,
-            base_url,
-            use_bearer_auth,
-            provider,
-        )?);
+        let provider_str = provider.unwrap_or("anthropic");
+        let client = Arc::new(if provider_str == "google" {
+            ApiClient::google(credential)
+        } else {
+            ApiClient::anthropic(credential, base_url, use_bearer_auth, provider)?
+        });
         let mut tools = ToolRegistry::with_defaults();
 
         let agent_config = Arc::new(AgentConfig {

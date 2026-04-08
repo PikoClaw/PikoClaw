@@ -3,7 +3,7 @@ use crate::agent_loop::run_turn;
 use crate::context::ConversationContext;
 use crate::output::SilentSink;
 use async_trait::async_trait;
-use piko_api::AnthropicClient;
+use piko_api::ApiClient;
 use piko_tools::registry::ToolRegistry;
 use piko_tools::tool_trait::{Tool, ToolContext};
 use piko_types::tool::{ToolDefinition, ToolResult};
@@ -12,12 +12,12 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 pub struct AgentTool {
-    client: Arc<AnthropicClient>,
+    client: Arc<ApiClient>,
     config: Arc<AgentConfig>,
 }
 
 impl AgentTool {
-    pub fn new(client: Arc<AnthropicClient>, config: Arc<AgentConfig>) -> Self {
+    pub fn new(client: Arc<ApiClient>, config: Arc<AgentConfig>) -> Self {
         Self { client, config }
     }
 }

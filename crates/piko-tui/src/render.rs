@@ -1318,7 +1318,7 @@ fn render_model_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect
 }
 
 fn render_connect_dialog(frame: &mut Frame, app: &App, area: ratatui::layout::Rect, t: &Theme) {
-    let dialog = centered_rect(64, 10, area);
+    let dialog = centered_rect(64, 12, area);
     frame.render_widget(Clear, area);
     frame.render_widget(
         Block::default().style(Style::default().bg(Color::Rgb(0, 0, 0))),

@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
     }
     // Spawn background refresh so the next run has fresh data.
     spawn_models_cache_refresh();
-    let inferred_provider = config.api.provider.clone().or_else(|| {
+    let mut inferred_provider = config.api.provider.clone().or_else(|| {
         model_registry
             .find_provider_for_model(config.api.model.as_str())
             .map(|p| p.to_string())
@@ -112,12 +112,35 @@ async fn main() -> Result<()> {
     } else if let Some(key) = config.api.api_key.clone() {
         (key, false)
     } else {
-        // No explicit credentials — try stored OAuth tokens or run browser login.
-        let tokens = piko_oauth::run_login_flow().await?;
-        // Console users get an API key written into config by run_login_flow;
-        // claude.ai subscribers get a Bearer access token.
-        let use_bearer = tokens.refresh_token.is_some() || tokens.expires_at_ms != u64::MAX;
-        (tokens.access_token, use_bearer)
+        // No explicit credentials — show provider picker so the user can choose
+        // between Anthropic OAuth or another provider's API key.
+        use piko_tui::onboarding::{run_provider_picker, ProviderChoice};
+        match run_provider_picker(&config.tui.theme)? {
+            ProviderChoice::Anthropic => {
+                let tokens = piko_oauth::run_login_flow().await?;
+                let use_bearer =
+                    tokens.refresh_token.is_some() || tokens.expires_at_ms != u64::MAX;
+                (tokens.access_token, use_bearer)
+            }
+            ProviderChoice::ApiKey {
+                provider_id,
+                provider_label: _,
+                base_url,
+                api_key,
+                use_bearer,
+            } => {
+                config.api.provider = Some(provider_id.clone());
+                config.api.base_url = base_url;
+                config.api.api_key = Some(api_key.clone());
+                config.api.auth_token = None;
+                if let Some(best) = model_registry.best_model_for_provider(&provider_id) {
+                    config.api.model = piko_types::model::ModelId::new(&best);
+                }
+                inferred_provider = Some(provider_id);
+                let _ = save_config(&config);
+                (api_key, use_bearer)
+            }
+        }
     };
 
     let base_url = config.api.base_url.clone();
