@@ -21,7 +21,7 @@
 
 The Open Source High-performance AI agent for developers, written in Rust. Inspired from Claude Code leak ; )
 
-Ultra lightweight (~6-7 MB) and blazing fast. All LLMs are Supported i.e. `Anthropic`, `OpenAI`, `OpenRouter.ai` etc
+Ultra lightweight (~6-7 MB) and blazing fast. All LLMs are Supported i.e. `Anthropic`, `OpenAI`, `Google`, `OpenRouter.ai` etc
 
 Run `/connect` command to connect to AI Provider of your choice! 
 
